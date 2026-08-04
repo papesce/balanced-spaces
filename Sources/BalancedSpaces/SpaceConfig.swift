@@ -8,15 +8,29 @@ final class SpaceConfig {
         let id: UInt64
         var name: String
         var notes: String
+        var symbolName: String?
 
-        init(id: UInt64, name: String = "", notes: String = "") {
+        init(id: UInt64, name: String = "", notes: String = "", symbolName: String? = nil) {
             self.id = id
             self.name = name
             self.notes = notes
+            self.symbolName = symbolName
         }
     }
 
+    static let presetIcons: [(title: String, symbol: String)] = [
+        ("Work", "briefcase"),
+        ("Life", "figure.walk"),
+        ("Health", "heart"),
+        ("Finances", "dollarsign.circle"),
+    ]
+
     private static let storageKey = "spaceEntries"
+
+    private struct StoredConfig: Codable {
+        let formatVersion: Int
+        let entries: [SpaceEntry]
+    }
 
     private(set) var entries: [UInt64: SpaceEntry] = [:]
 
@@ -53,8 +67,20 @@ final class SpaceConfig {
         save()
     }
 
+    func updateSymbol(_ symbolName: String?, for id: UInt64) {
+        guard var entry = entries[id] else { return }
+        entry.symbolName = symbolName
+        entries[id] = entry
+        save()
+    }
+
     func delete(id: UInt64) {
         entries.removeValue(forKey: id)
+        save()
+    }
+
+    func replace(with imported: [SpaceEntry]) {
+        entries = Dictionary(uniqueKeysWithValues: imported.map { ($0.id, $0) })
         save()
     }
 
@@ -62,9 +88,14 @@ final class SpaceConfig {
         entries.values.sorted { $0.id < $1.id }
     }
 
+    func allEntries() -> [SpaceEntry] {
+        sortedEntries
+    }
+
     private func save() {
         do {
-            let data = try JSONEncoder().encode(Array(entries.values))
+            let stored = StoredConfig(formatVersion: 1, entries: Array(entries.values))
+            let data = try JSONEncoder().encode(stored)
             UserDefaults.standard.set(data, forKey: Self.storageKey)
         } catch {
             NSLog("BalancedSpaces: failed to save space config: \(error)")
@@ -74,8 +105,14 @@ final class SpaceConfig {
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: Self.storageKey) else { return }
         do {
-            let stored = try JSONDecoder().decode([SpaceEntry].self, from: data)
-            entries = Dictionary(uniqueKeysWithValues: stored.map { ($0.id, $0) })
+            if let stored = try? JSONDecoder().decode(StoredConfig.self, from: data) {
+                entries = Dictionary(uniqueKeysWithValues: stored.entries.map { ($0.id, $0) })
+            } else {
+                // Migrate the original unversioned array format.
+                let legacy = try JSONDecoder().decode([SpaceEntry].self, from: data)
+                entries = Dictionary(uniqueKeysWithValues: legacy.map { ($0.id, $0) })
+                save()
+            }
         } catch {
             NSLog("BalancedSpaces: failed to load space config: \(error)")
         }

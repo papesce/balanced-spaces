@@ -13,7 +13,12 @@ struct BalancedSpacesApp: App {
         MenuBarExtra {
             ContentView(store: store)
         } label: {
-            Text(store.currentSpaceName)
+            HStack(spacing: 4) {
+                if let symbol = store.currentEntry?.symbolName, !symbol.isEmpty {
+                    Image(systemName: symbol)
+                }
+                Text(store.currentSpaceName)
+            }
         }
         .menuBarExtraStyle(.window)
     }
