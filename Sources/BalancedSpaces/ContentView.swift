@@ -10,7 +10,9 @@ struct ContentView: View {
     @State private var showIconPicker = false
     @State private var saveIndicatorTask: Task<Void, Never>?
     @State private var isEditingRow = false
-    @State private var editSnapshot: SpaceConfig.SpaceEntry?
+    @State private var draftName = ""
+    @State private var draftNotes = ""
+    @State private var draftSymbolName: String?
     @State private var isRowHovered = false
 
     var body: some View {
@@ -21,9 +23,9 @@ struct ContentView: View {
         }
         .frame(width: 340)
         .overlay {
-            if showIconPicker, let entry = store.currentEntry {
+            if showIconPicker {
                 IconPickerDismissScrim(isExpanded: $showIconPicker)
-                IconPickerPanel(symbolName: symbolBinding(for: entry), isExpanded: $showIconPicker)
+                IconPickerPanel(symbolName: $draftSymbolName, isExpanded: $showIconPicker)
                     .offset(x: 20, y: 46)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
@@ -86,77 +88,81 @@ struct ContentView: View {
     }
 
     private func spaceRow(_ entry: SpaceConfig.SpaceEntry) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                if isEditingRow {
-                    IconPickerView(symbolName: symbolBinding(for: entry), isExpanded: $showIconPicker)
-                    TextField("Untitled Space", text: nameBinding(for: entry))
-                        .textFieldStyle(.plain)
-                        .font(.headline)
-                } else {
-                    if let symbolName = entry.symbolName {
-                        Image(systemName: symbolName)
-                            .font(.system(size: 15))
-                            .frame(width: 28, height: 28)
+        HStack(alignment: .top, spacing: 8) {
+            if isEditingRow {
+                IconPickerView(symbolName: $draftSymbolName, isExpanded: $showIconPicker)
+            } else if let symbolName = entry.symbolName {
+                Image(systemName: symbolName)
+                    .font(.system(size: 15))
+                    .frame(width: 28, height: 28)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    if isEditingRow {
+                        TextField("Untitled Space", text: $draftName)
+                            .textFieldStyle(.plain)
+                            .font(.headline)
+                    } else {
+                        Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
+                            .font(.headline)
+                            .foregroundStyle(entry.name.isEmpty ? .tertiary : .primary)
                     }
-                    Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
-                        .font(.headline)
-                        .foregroundStyle(entry.name.isEmpty ? .tertiary : .primary)
-                }
-                Spacer()
-                if showSavedIndicator {
-                    Text("Saved")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .transition(.opacity)
-                }
-                if isEditingRow {
-                    if editSnapshot != nil, editSnapshot != store.config.entry(for: entry.id) {
-                        Button("Revert", action: revertEdit)
+                    Spacer()
+                    if showSavedIndicator {
+                        Text("Saved")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .transition(.opacity)
+                    }
+                    if isEditingRow {
+                        Button("Cancel") { cancelEdit() }
                             .font(.caption)
                             .buttonStyle(.plain)
                             .foregroundStyle(.secondary)
-                    }
-                    Button("Done", action: endEditing)
-                        .font(.caption)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                } else if isRowHovered {
-                    Button(action: beginEditing) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 12))
+                        Button("Done") { commitEdit(for: entry) }
+                            .font(.caption)
+                            .buttonStyle(.plain)
                             .foregroundStyle(.secondary)
+                    } else if isRowHovered {
+                        Button { beginEditing(with: entry) } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Edit this Space")
+                        .accessibilityLabel("Edit this Space")
                     }
-                    .buttonStyle(.plain)
-                    .help("Edit this Space")
-                    .accessibilityLabel("Edit this Space")
                 }
-            }
-            if isEditingRow {
-                MarkdownNotesEditor(text: notesBinding(for: entry), placeholder: "Notes…", minHeight: 100, maxHeight: 220)
-            } else {
-                NotesPlainTextView(text: entry.notes)
-                    .padding(.leading, entry.symbolName == nil ? 0 : 36)
+                if isEditingRow {
+                    MarkdownNotesEditor(text: $draftNotes, placeholder: "Notes…", minHeight: 100, maxHeight: 220)
+                } else {
+                    NotesPlainTextView(text: entry.notes)
+                }
             }
         }
         .padding(8)
         .onHover { isRowHovered = $0 }
+        .onExitCommand { cancelEdit() }
     }
 
-    private func beginEditing() {
-        editSnapshot = store.currentEntry
+    private func beginEditing(with entry: SpaceConfig.SpaceEntry) {
+        draftName = entry.name
+        draftNotes = entry.notes
+        draftSymbolName = entry.symbolName
         isEditingRow = true
     }
 
-    private func endEditing() {
+    private func commitEdit(for entry: SpaceConfig.SpaceEntry) {
+        store.config.restore(
+            SpaceConfig.SpaceEntry(id: entry.id, name: draftName, notes: draftNotes, symbolName: draftSymbolName)
+        )
+        scheduleSavedIndicator()
         isEditingRow = false
-        editSnapshot = nil
     }
 
-    private func revertEdit() {
-        guard let snapshot = editSnapshot else { return }
-        store.config.restore(snapshot)
-        scheduleSavedIndicator()
+    private func cancelEdit() {
+        isEditingRow = false
     }
 
     private var footer: some View {
@@ -242,33 +248,4 @@ struct ContentView: View {
         }
     }
 
-    private func nameBinding(for entry: SpaceConfig.SpaceEntry) -> Binding<String> {
-        Binding(
-            get: { store.config.entry(for: entry.id)?.name ?? entry.name },
-            set: { newValue in
-                store.config.updateName(newValue, for: entry.id)
-                scheduleSavedIndicator()
-            }
-        )
-    }
-
-    private func notesBinding(for entry: SpaceConfig.SpaceEntry) -> Binding<String> {
-        Binding(
-            get: { store.config.entry(for: entry.id)?.notes ?? entry.notes },
-            set: { newValue in
-                store.config.updateNotes(newValue, for: entry.id)
-                scheduleSavedIndicator()
-            }
-        )
-    }
-
-    private func symbolBinding(for entry: SpaceConfig.SpaceEntry) -> Binding<String?> {
-        Binding(
-            get: { store.config.entry(for: entry.id)?.symbolName ?? entry.symbolName },
-            set: { newValue in
-                store.config.updateSymbol(newValue, for: entry.id)
-                scheduleSavedIndicator()
-            }
-        )
-    }
 }

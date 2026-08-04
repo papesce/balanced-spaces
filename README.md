@@ -5,7 +5,8 @@ A lightweight macOS menu bar app that helps you keep track of what each Space (v
 ## Features
 
 - **Per-Space identity** — give each Space a name and a custom icon so you can tell them apart at a glance.
-- **Notes per Space** — jot down quick notes for each desktop; they're saved automatically as you type.
+- **Read-only by default, edit on demand** — the menu shows a clean, plain-text view of the current Space; hover to reveal a pencil, make your changes, then Done to save or Cancel to discard.
+- **Notes per Space** — jot down quick notes for each desktop.
 - **Text highlighting** — mark up notes with a highlight style to make key parts stand out.
 - **Clickable links** — URLs typed into your notes are automatically detected and become clickable.
 - **Backup & restore** — export your Spaces (names, icons, notes) to a file and import them again, making it easy to back up or move your setup to another Mac.

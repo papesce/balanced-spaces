@@ -50,30 +50,16 @@ struct NotesPlainTextView: View {
                 .font(.callout)
                 .foregroundStyle(.tertiary)
         } else {
-            NotesText(text: text)
+            Text(attributedText)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
-}
 
-private struct NotesText: NSViewRepresentable {
-    let text: String
-
-    func makeNSView(context: Context) -> NSTextView {
-        let textView = NSTextView()
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.drawsBackground = false
-        textView.textContainerInset = .zero
-        textView.textContainer?.lineFragmentPadding = 0
-        textView.string = text
-        applyNotesHighlighting(to: textView.textStorage!)
-        return textView
-    }
-
-    func updateNSView(_ textView: NSTextView, context: Context) {
-        if textView.string != text {
-            textView.string = text
-            applyNotesHighlighting(to: textView.textStorage!)
-        }
+    private var attributedText: AttributedString {
+        let storage = NSTextStorage(string: text)
+        applyNotesHighlighting(to: storage)
+        return AttributedString(storage)
     }
 }
