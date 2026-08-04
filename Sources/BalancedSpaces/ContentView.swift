@@ -10,7 +10,6 @@ struct ContentView: View {
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "didShowOnboarding")
     @State private var editingEntryID: UInt64?
     @State private var hoveredEntryID: UInt64?
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -18,7 +17,7 @@ struct ContentView: View {
             Divider()
             footer
         }
-        .frame(width: 340, height: 480)
+        .frame(width: 340)
         .background {
             Button("") { toggleEditing(for: store.currentSpaceID) }
                 .keyboardShortcut("e", modifiers: .command)
@@ -57,13 +56,16 @@ struct ContentView: View {
     }
 
     private var spacesSection: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                ForEach(store.config.sortedEntries) { entry in
-                    spaceRow(entry)
-                }
+        Group {
+            if let entry = store.currentEntry {
+                spaceRow(entry)
+                    .padding(12)
+            } else {
+                Text("No Space detected")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(12)
             }
-            .padding(12)
         }
     }
 
@@ -94,17 +96,6 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                         .transition(.opacity)
                 }
-                if isEditing {
-                    Button {
-                        store.config.delete(id: entry.id)
-                        editingEntryID = nil
-                    } label: {
-                        Image(systemName: "trash")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Delete this space")
-                }
                 Button {
                     toggleEditing(for: entry.id)
                 } label: {
@@ -113,16 +104,16 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .opacity(isHovered || isEditing ? 1 : 0)
-                .help(isEditing ? "Done editing" : "Edit this space")
             }
             if isEditing {
-                MarkdownNotesEditor(text: notesBinding(for: entry), placeholder: "Notes…", minHeight: 40, maxHeight: 80)
+                MarkdownNotesEditor(text: notesBinding(for: entry), placeholder: "Notes…", minHeight: 100, maxHeight: 220)
             } else if !entry.notes.isEmpty {
                 Text(renderedPreview(entry.notes))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(6)
             }
         }
         .padding(8)
@@ -137,8 +128,7 @@ struct ContentView: View {
     }
 
     private func renderedPreview(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(text)
+        renderNotes(text)
     }
 
     private var footer: some View {
@@ -151,11 +141,8 @@ struct ContentView: View {
             HStack {
                 Spacer()
                 Menu {
-                    Button("Edit Current Space") { toggleEditing(for: store.currentSpaceID) }
-                    Divider()
                     Button("Import…", action: importBackup)
                     Button("Export…", action: exportBackup)
-                    Button("Settings…") { openSettings() }
                     Divider()
                     Button("Quit") {
                         NSApplication.shared.terminate(nil)

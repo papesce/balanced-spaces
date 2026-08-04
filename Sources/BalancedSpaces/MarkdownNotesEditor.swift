@@ -1,10 +1,10 @@
 import SwiftUI
 import AppKit
 
-/// A TextEditor with a lightweight Markdown formatting toolbar and a
-/// read-only rendered preview toggle. Selection-aware wrapping (bold,
-/// italic) is done via an NSTextView bridge since SwiftUI's TextEditor
-/// doesn't expose the current selection.
+/// A TextEditor with a highlight toggle and a read-only rendered preview.
+/// Notes are plain text with `==highlight==` spans and auto-linked URLs —
+/// not Markdown. Selection-aware wrapping is done via an NSTextView bridge
+/// since SwiftUI's TextEditor doesn't expose the current selection.
 struct MarkdownNotesEditor: View {
     @Binding var text: String
     var placeholder: String = "Notes…"
@@ -45,22 +45,10 @@ struct MarkdownNotesEditor: View {
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Button { wrap(with: "**") } label: {
-                Image(systemName: "bold")
+            Button { wrap(with: "==") } label: {
+                Image(systemName: "highlighter")
             }
-            .help("Bold")
-            Button { wrap(with: "*") } label: {
-                Image(systemName: "italic")
-            }
-            .help("Italic")
-            Button { prefixLine(with: "# ") } label: {
-                Image(systemName: "number")
-            }
-            .help("Heading")
-            Button { prefixLine(with: "- [ ] ") } label: {
-                Image(systemName: "checklist")
-            }
-            .help("Checklist item")
+            .help("Highlight")
             Spacer()
             Button(showPreview ? "Edit" : "Preview") {
                 showPreview.toggle()
@@ -72,8 +60,7 @@ struct MarkdownNotesEditor: View {
     }
 
     private var renderedMarkdown: AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(text)
+        renderNotes(text)
     }
 
     private func wrap(with marker: String) {
@@ -85,14 +72,6 @@ struct MarkdownNotesEditor: View {
         text.replaceSubrange(range, with: "\(marker)\(selected)\(marker)")
     }
 
-    private func prefixLine(with marker: String) {
-        guard let range = Range(selectedRange, in: text) else {
-            text = marker + text
-            return
-        }
-        let lineRange = text.lineRange(for: range)
-        text.insert(contentsOf: marker, at: lineRange.lowerBound)
-    }
 }
 
 private struct SelectionTrackingTextView: NSViewRepresentable {
@@ -103,14 +82,25 @@ private struct SelectionTrackingTextView: NSViewRepresentable {
         let textView = NSTextView()
         textView.delegate = context.coordinator
         textView.isRichText = false
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.isAutomaticLinkDetectionEnabled = true
         textView.font = .systemFont(ofSize: NSFont.systemFontSize)
         textView.textContainerInset = NSSize(width: 4, height: 6)
         textView.string = text
+        textView.drawsBackground = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
 
         let scrollView = NSScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
         return scrollView
     }
 
