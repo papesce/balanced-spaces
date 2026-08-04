@@ -1,2 +1,8 @@
 # Plans (private, not for GitHub)
 plans/
+
+# Swift Package Manager
+.build/
+
+# Local app bundle output
+build/
