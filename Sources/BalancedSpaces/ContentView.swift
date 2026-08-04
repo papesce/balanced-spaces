@@ -8,24 +8,20 @@ struct ContentView: View {
     @State private var savedToast = false
     @State private var pendingImport: BackupImport?
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "didShowOnboarding")
-    @FocusState private var currentNameFocused: Bool
-    @FocusState private var currentNotesFocused: Bool
+    @State private var editingEntryID: UInt64?
+    @State private var hoveredEntryID: UInt64?
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            currentSpaceSection
-            Divider()
             spacesSection
             Divider()
             footer
         }
         .frame(width: 340, height: 480)
         .background {
-            Button("") { currentNameFocused = true }
+            Button("") { toggleEditing(for: store.currentSpaceID) }
                 .keyboardShortcut("e", modifiers: .command)
-                .hidden()
-            Button("") { currentNotesFocused = true }
-                .keyboardShortcut("n", modifiers: .command)
                 .hidden()
         }
         .sheet(isPresented: $showOnboarding) {
@@ -48,46 +44,9 @@ struct ContentView: View {
         }
     }
 
-    private var currentSpaceSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                IconPickerView(symbolName: currentSymbolBinding)
-                if let id = store.currentSpaceID, id != 0, (store.currentEntry?.name ?? "").isEmpty {
-                    TextField("Click to name this Space", text: currentNameBinding)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.headline)
-                        .focused($currentNameFocused)
-                } else {
-                    Text(store.currentSpaceName)
-                        .font(.headline)
-                }
-                Spacer()
-                if savedToast {
-                    Text("Saved")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .transition(.opacity)
-                }
-                Text("Current Space")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            TextEditor(text: currentNotesBinding)
-                .font(.callout)
-                .frame(minHeight: 56, maxHeight: 96)
-                .focused($currentNotesFocused)
-                .overlay(alignment: .topLeading) {
-                    if currentNotesBinding.wrappedValue.isEmpty {
-                        Text("Notes for this space…")
-                            .font(.callout)
-                            .foregroundStyle(.tertiary)
-                            .padding(.top, 8)
-                            .padding(.leading, 5)
-                            .allowsHitTesting(false)
-                    }
-                }
-        }
-        .padding(12)
+    private func toggleEditing(for id: UInt64?) {
+        guard let id, id != 0 else { return }
+        editingEntryID = editingEntryID == id ? nil : id
     }
 
     private func showSavedToast() {
@@ -109,27 +68,78 @@ struct ContentView: View {
     }
 
     private func spaceRow(_ entry: SpaceConfig.SpaceEntry) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let isCurrent = entry.id == store.currentSpaceID
+        let isHovered = hoveredEntryID == entry.id
+        let isEditing = editingEntryID == entry.id
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                IconPickerView(symbolName: symbolBinding(for: entry))
-                TextField("Name", text: nameBinding(for: entry))
-                    .textFieldStyle(.roundedBorder)
-                    .font(.body)
+                SpaceThumbnailView(id: entry.id)
+                if isEditing {
+                    IconPickerView(symbolName: symbolBinding(for: entry))
+                    TextField("Name", text: nameBinding(for: entry))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body)
+                } else {
+                    if let symbolName = entry.symbolName {
+                        Image(systemName: symbolName)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
+                        .font(isCurrent ? .headline : .body)
+                        .foregroundStyle(entry.name.isEmpty ? .secondary : .primary)
+                }
+                Spacer()
+                if isCurrent && savedToast {
+                    Text("Saved")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .transition(.opacity)
+                }
+                if isEditing {
+                    Button {
+                        store.config.delete(id: entry.id)
+                        editingEntryID = nil
+                    } label: {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Delete this space")
+                }
                 Button {
-                    store.config.delete(id: entry.id)
+                    toggleEditing(for: entry.id)
                 } label: {
-                    Image(systemName: "trash")
+                    Image(systemName: isEditing ? "checkmark.circle" : "pencil")
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.borderless)
-                .help("Delete this space")
+                .opacity(isHovered || isEditing ? 1 : 0)
+                .help(isEditing ? "Done editing" : "Edit this space")
             }
-            TextEditor(text: notesBinding(for: entry))
-                .font(.callout)
-                .frame(minHeight: 40, maxHeight: 80)
+            if isEditing {
+                MarkdownNotesEditor(text: notesBinding(for: entry), placeholder: "Notes…", minHeight: 40, maxHeight: 80)
+            } else if !entry.notes.isEmpty {
+                Text(renderedPreview(entry.notes))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(3)
+            }
         }
         .padding(8)
-        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
+        .background(
+            isCurrent ? Color.accentColor.opacity(0.08) : (isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.03)),
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .animation(.easeInOut(duration: 0.1), value: isHovered)
+        .onHover { hovering in
+            hoveredEntryID = hovering ? entry.id : (hoveredEntryID == entry.id ? nil : hoveredEntryID)
+        }
+    }
+
+    private func renderedPreview(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(text)
     }
 
     private var footer: some View {
@@ -142,6 +152,7 @@ struct ContentView: View {
             HStack {
                 Button("Export…", action: exportBackup)
                 Button("Import…", action: importBackup)
+                Button("Settings…") { openSettings() }
                 Spacer()
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
@@ -177,39 +188,6 @@ struct ContentView: View {
         } catch {
             backupError = "Import failed: \(error.localizedDescription)"
         }
-    }
-
-    private var currentNotesBinding: Binding<String> {
-        Binding(
-            get: { store.currentEntry?.notes ?? "" },
-            set: { newValue in
-                guard let id = store.currentSpaceID, id != 0 else { return }
-                store.config.updateNotes(newValue, for: id)
-                showSavedToast()
-            }
-        )
-    }
-
-    private var currentNameBinding: Binding<String> {
-        Binding(
-            get: { store.currentEntry?.name ?? "" },
-            set: { newValue in
-                guard let id = store.currentSpaceID, id != 0 else { return }
-                store.config.updateName(newValue, for: id)
-                showSavedToast()
-            }
-        )
-    }
-
-    private var currentSymbolBinding: Binding<String?> {
-        Binding(
-            get: { store.currentEntry?.symbolName },
-            set: { newValue in
-                guard let id = store.currentSpaceID, id != 0 else { return }
-                store.config.updateSymbol(newValue, for: id)
-                showSavedToast()
-            }
-        )
     }
 
     private func nameBinding(for entry: SpaceConfig.SpaceEntry) -> Binding<String> {
