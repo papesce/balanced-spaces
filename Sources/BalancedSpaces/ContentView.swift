@@ -9,6 +9,9 @@ struct ContentView: View {
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "didShowOnboarding")
     @State private var showIconPicker = false
     @State private var saveIndicatorTask: Task<Void, Never>?
+    @State private var isEditingRow = false
+    @State private var editSnapshot: SpaceConfig.SpaceEntry?
+    @State private var isRowHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -85,10 +88,21 @@ struct ContentView: View {
     private func spaceRow(_ entry: SpaceConfig.SpaceEntry) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                IconPickerView(symbolName: symbolBinding(for: entry), isExpanded: $showIconPicker)
-                TextField("Untitled Space", text: nameBinding(for: entry))
-                    .textFieldStyle(.plain)
-                    .font(.headline)
+                if isEditingRow {
+                    IconPickerView(symbolName: symbolBinding(for: entry), isExpanded: $showIconPicker)
+                    TextField("Untitled Space", text: nameBinding(for: entry))
+                        .textFieldStyle(.plain)
+                        .font(.headline)
+                } else {
+                    if let symbolName = entry.symbolName {
+                        Image(systemName: symbolName)
+                            .font(.system(size: 15))
+                            .frame(width: 28, height: 28)
+                    }
+                    Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
+                        .font(.headline)
+                        .foregroundStyle(entry.name.isEmpty ? .tertiary : .primary)
+                }
                 Spacer()
                 if showSavedIndicator {
                     Text("Saved")
@@ -96,10 +110,53 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                         .transition(.opacity)
                 }
+                if isEditingRow {
+                    if editSnapshot != nil, editSnapshot != store.config.entry(for: entry.id) {
+                        Button("Revert", action: revertEdit)
+                            .font(.caption)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Done", action: endEditing)
+                        .font(.caption)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                } else if isRowHovered {
+                    Button(action: beginEditing) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Edit this Space")
+                    .accessibilityLabel("Edit this Space")
+                }
             }
-            MarkdownNotesEditor(text: notesBinding(for: entry), placeholder: "Notes…", minHeight: 100, maxHeight: 220)
+            if isEditingRow {
+                MarkdownNotesEditor(text: notesBinding(for: entry), placeholder: "Notes…", minHeight: 100, maxHeight: 220)
+            } else {
+                NotesPlainTextView(text: entry.notes)
+                    .padding(.leading, entry.symbolName == nil ? 0 : 36)
+            }
         }
         .padding(8)
+        .onHover { isRowHovered = $0 }
+    }
+
+    private func beginEditing() {
+        editSnapshot = store.currentEntry
+        isEditingRow = true
+    }
+
+    private func endEditing() {
+        isEditingRow = false
+        editSnapshot = nil
+    }
+
+    private func revertEdit() {
+        guard let snapshot = editSnapshot else { return }
+        store.config.restore(snapshot)
+        scheduleSavedIndicator()
     }
 
     private var footer: some View {

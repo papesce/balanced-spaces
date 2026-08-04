@@ -74,6 +74,12 @@ final class SpaceConfig {
         save()
     }
 
+    /// Writes name+notes+symbolName from a snapshot in one save, e.g. to revert an in-progress edit.
+    func restore(_ snapshot: SpaceEntry) {
+        entries[snapshot.id] = snapshot
+        save()
+    }
+
     func delete(id: UInt64) {
         entries.removeValue(forKey: id)
         save()

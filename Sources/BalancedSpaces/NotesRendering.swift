@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import SwiftUI
 
 /// Applies lightweight notes affordances directly onto a live `NSTextStorage`:
 /// `==highlighted==` spans get a highlight background, and detected URLs
@@ -36,4 +37,43 @@ func applyNotesHighlighting(to storage: NSTextStorage) {
         }
     }
     storage.endEditing()
+}
+
+/// Static, non-editable notes display for the read-only row state: same
+/// highlighting/link affordances as the editor, but no input chrome.
+struct NotesPlainTextView: View {
+    let text: String
+
+    var body: some View {
+        if text.isEmpty {
+            Text("Notes…")
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+        } else {
+            NotesText(text: text)
+        }
+    }
+}
+
+private struct NotesText: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSTextView {
+        let textView = NSTextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.string = text
+        applyNotesHighlighting(to: textView.textStorage!)
+        return textView
+    }
+
+    func updateNSView(_ textView: NSTextView, context: Context) {
+        if textView.string != text {
+            textView.string = text
+            applyNotesHighlighting(to: textView.textStorage!)
+        }
+    }
 }
