@@ -7,3 +7,12 @@ plans/
 
 # Local app bundle output
 build/
+
+# macOS
+.DS_Store
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
