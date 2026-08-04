@@ -17,23 +17,6 @@ struct IconPickerView: View {
         .buttonStyle(.plain)
         .help("Choose an icon")
         .accessibilityLabel("Choose an icon")
-        .overlay(alignment: .topLeading) {
-            if isExpanded {
-                IconPickerPanel(symbolName: symbolBindingClosing, isExpanded: $isExpanded)
-                    .offset(y: 34)
-                    .zIndex(1)
-            }
-        }
-    }
-
-    private var symbolBindingClosing: Binding<String?> {
-        Binding(
-            get: { symbolName },
-            set: { newValue in
-                symbolName = newValue
-                isExpanded = false
-            }
-        )
     }
 }
 
@@ -62,13 +45,13 @@ struct IconPickerPanel: View {
             Text("A small visual cue is enough. You can also leave this empty.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: 180)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 30, maximum: 30), spacing: 6)], spacing: 6) {
                 iconButton(nil)
                 ForEach(curated, id: \.self) { iconButton($0) }
             }
         }
         .padding(10)
+        .frame(width: 180)
         .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.12)))
         .shadow(radius: 8, y: 2)
@@ -77,6 +60,7 @@ struct IconPickerPanel: View {
     private func iconButton(_ name: String?) -> some View {
         Button {
             symbolName = name
+            isExpanded = false
         } label: {
             Image(systemName: name ?? "nosign")
                 .font(.system(size: 15))

@@ -18,7 +18,12 @@ struct ContentView: View {
         }
         .frame(width: 340)
         .overlay {
-            IconPickerDismissScrim(isExpanded: $showIconPicker)
+            if showIconPicker, let entry = store.currentEntry {
+                IconPickerDismissScrim(isExpanded: $showIconPicker)
+                IconPickerPanel(symbolName: symbolBinding(for: entry), isExpanded: $showIconPicker)
+                    .offset(x: 20, y: 46)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
         }
         .sheet(isPresented: $showOnboarding) {
             OnboardingView {
