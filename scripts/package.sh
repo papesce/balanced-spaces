@@ -16,6 +16,7 @@ rm -rf "$APP_PATH"
 mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources"
 cp ".build/release/$EXECUTABLE" "$APP_PATH/Contents/MacOS/$EXECUTABLE"
 cp Info.plist "$APP_PATH/Contents/Info.plist"
+cp Resources/AppIcon.icns "$APP_PATH/Contents/Resources/AppIcon.icns"
 printf 'APPL????' > "$APP_PATH/Contents/PkgInfo"
 
 echo "==> Ad-hoc signing…"

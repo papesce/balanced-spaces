@@ -7,7 +7,7 @@ struct SettingsView: View {
     @State private var backupsFolder: URL?
     @State private var launchAtLoginError: String?
 
-    private let backupManager = BackupManager()
+    private let fileManager = SpaceFileManager()
 
     var body: some View {
         Form {
@@ -51,7 +51,7 @@ struct SettingsView: View {
         }
         .padding(20)
         .frame(width: 380)
-        .onAppear { backupsFolder = try? backupManager.backupsFolderURL() }
+        .onAppear { backupsFolder = try? fileManager.backupsFolderURL() }
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

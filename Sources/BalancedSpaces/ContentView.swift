@@ -3,13 +3,12 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Bindable var store: SpaceStore
-    private let backupManager = BackupManager()
-    @State private var backupError: String?
-    @State private var savedToast = false
-    @State private var pendingImport: BackupImport?
+    private let fileManager = SpaceFileManager()
+    @State private var saveLoadError: String?
+    @State private var showSavedIndicator = false
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "didShowOnboarding")
-    @State private var editingEntryID: UInt64?
-    @State private var hoveredEntryID: UInt64?
+    @State private var showIconPicker = false
+    @State private var saveIndicatorTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -18,10 +17,8 @@ struct ContentView: View {
             footer
         }
         .frame(width: 340)
-        .background {
-            Button("") { toggleEditing(for: store.currentSpaceID) }
-                .keyboardShortcut("e", modifiers: .command)
-                .hidden()
+        .overlay {
+            IconPickerDismissScrim(isExpanded: $showIconPicker)
         }
         .sheet(isPresented: $showOnboarding) {
             OnboardingView {
@@ -29,29 +26,40 @@ struct ContentView: View {
                 showOnboarding = false
             }
         }
-        .sheet(item: $pendingImport) { backup in
-            ImportReviewView(
-                backup: backup,
-                existingEntries: store.config.allEntries(),
-                onCancel: { pendingImport = nil },
-                onConfirm: { backup, mode in
-                    backupManager.apply(backup, to: store.config, mode: mode)
-                    pendingImport = nil
-                    backupError = nil
-                }
-            )
+    }
+
+    private func confirmClearCurrentSpace() {
+        guard store.currentEntry != nil else { return }
+        let alert = NSAlert()
+        alert.messageText = "Clear this Space?"
+        alert.informativeText = "This removes the name, notes, and icon for the current Space. This can't be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Clear")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            clearCurrentSpace()
         }
     }
 
-    private func toggleEditing(for id: UInt64?) {
-        guard let id, id != 0 else { return }
-        editingEntryID = editingEntryID == id ? nil : id
+    private func clearCurrentSpace() {
+        guard let id = store.currentSpaceID else { return }
+        store.config.updateName("", for: id)
+        store.config.updateNotes("", for: id)
+        store.config.updateSymbol(nil, for: id)
+        scheduleSavedIndicator()
     }
 
-    private func showSavedToast() {
-        withAnimation { savedToast = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            withAnimation { savedToast = false }
+    /// Debounced: waits for edits to settle before showing "Saved", since the
+    /// underlying store already persists on every keystroke.
+    private func scheduleSavedIndicator() {
+        saveIndicatorTask?.cancel()
+        saveIndicatorTask = Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            withAnimation { showSavedIndicator = true }
+            try? await Task.sleep(for: .seconds(1.2))
+            guard !Task.isCancelled else { return }
+            withAnimation { showSavedIndicator = false }
         }
     }
 
@@ -70,79 +78,46 @@ struct ContentView: View {
     }
 
     private func spaceRow(_ entry: SpaceConfig.SpaceEntry) -> some View {
-        let isCurrent = entry.id == store.currentSpaceID
-        let isHovered = hoveredEntryID == entry.id
-        let isEditing = editingEntryID == entry.id
-        return VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
-                if isEditing {
-                    IconPickerView(symbolName: symbolBinding(for: entry))
-                    TextField("Name", text: nameBinding(for: entry))
-                        .textFieldStyle(.roundedBorder)
-                        .font(.body)
-                } else {
-                    if let symbolName = entry.symbolName {
-                        Image(systemName: symbolName)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
-                        .font(isCurrent ? .headline : .body)
-                        .foregroundStyle(entry.name.isEmpty ? .secondary : .primary)
-                }
+                IconPickerView(symbolName: symbolBinding(for: entry), isExpanded: $showIconPicker)
+                TextField("Untitled Space", text: nameBinding(for: entry))
+                    .textFieldStyle(.plain)
+                    .font(.headline)
                 Spacer()
-                if isCurrent && savedToast {
+                if showSavedIndicator {
                     Text("Saved")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .transition(.opacity)
                 }
-                Button {
-                    toggleEditing(for: entry.id)
-                } label: {
-                    Image(systemName: isEditing ? "checkmark.circle" : "pencil")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.borderless)
-                .opacity(isHovered || isEditing ? 1 : 0)
             }
-            if isEditing {
-                MarkdownNotesEditor(text: notesBinding(for: entry), placeholder: "Notes…", minHeight: 100, maxHeight: 220)
-            } else if !entry.notes.isEmpty {
-                Text(renderedPreview(entry.notes))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(6)
-            }
+            MarkdownNotesEditor(text: notesBinding(for: entry), placeholder: "Notes…", minHeight: 100, maxHeight: 220)
         }
         .padding(8)
-        .background(
-            isCurrent ? Color.accentColor.opacity(0.08) : (isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.03)),
-            in: RoundedRectangle(cornerRadius: 6)
-        )
-        .animation(.easeInOut(duration: 0.1), value: isHovered)
-        .onHover { hovering in
-            hoveredEntryID = hovering ? entry.id : (hoveredEntryID == entry.id ? nil : hoveredEntryID)
-        }
-    }
-
-    private func renderedPreview(_ text: String) -> AttributedString {
-        renderNotes(text)
     }
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let backupError {
-                Text(backupError)
+            if let saveLoadError {
+                Text(saveLoadError)
                     .font(.caption)
                     .foregroundStyle(.red)
             }
             HStack {
                 Spacer()
                 Menu {
-                    Button("Import…", action: importBackup)
-                    Button("Export…", action: exportBackup)
+                    Button("Save Current Space…", action: saveCurrentSpace)
+                        .disabled(store.currentEntry == nil)
+                    Button("Save All Spaces…", action: saveAllSpaces)
+                    Divider()
+                    Button("Load Space…", action: loadSpace)
+                        .disabled(store.currentEntry == nil)
+                    Divider()
+                    Menu("Danger Zone") {
+                        Button("Clear Current Space…", action: confirmClearCurrentSpace)
+                            .disabled(store.currentEntry == nil)
+                    }
                     Divider()
                     Button("Quit") {
                         NSApplication.shared.terminate(nil)
@@ -158,30 +133,50 @@ struct ContentView: View {
         .padding(10)
     }
 
-    private func exportBackup() {
+    private func saveCurrentSpace() {
+        guard let entry = store.currentEntry else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.balancedSpacesBackup]
-        panel.nameFieldStringValue = "Spaces Backup.balancedspaces"
+        panel.allowedContentTypes = [.balancedSpace]
+        let baseName = entry.name.isEmpty ? "Untitled Space" : entry.name
+        panel.nameFieldStringValue = "\(baseName).balancedspace"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try backupManager.export(entries: store.config.allEntries(), to: url)
-            backupError = nil
+            try fileManager.save(entry: entry, to: url)
+            saveLoadError = nil
         } catch {
-            backupError = "Export failed: \(error.localizedDescription)"
+            saveLoadError = "Save failed: \(error.localizedDescription)"
         }
     }
 
-    private func importBackup() {
+    private func saveAllSpaces() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.balancedSpacesBackup]
         panel.canChooseDirectories = true
-        panel.canChooseFiles = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Choose"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            pendingImport = try backupManager.readImport(from: url)
-            backupError = nil
+            try fileManager.saveAll(entries: store.config.allEntries(), to: url)
+            saveLoadError = nil
         } catch {
-            backupError = "Import failed: \(error.localizedDescription)"
+            saveLoadError = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func loadSpace() {
+        guard let spaceID = store.currentSpaceID, store.currentEntry != nil else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.balancedSpace]
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let file = try fileManager.load(from: url)
+            fileManager.apply(file, toSpaceID: spaceID, config: store.config)
+            saveLoadError = nil
+        } catch {
+            saveLoadError = "Load failed: \(error.localizedDescription)"
         }
     }
 
@@ -190,7 +185,7 @@ struct ContentView: View {
             get: { store.config.entry(for: entry.id)?.name ?? entry.name },
             set: { newValue in
                 store.config.updateName(newValue, for: entry.id)
-                showSavedToast()
+                scheduleSavedIndicator()
             }
         )
     }
@@ -200,7 +195,7 @@ struct ContentView: View {
             get: { store.config.entry(for: entry.id)?.notes ?? entry.notes },
             set: { newValue in
                 store.config.updateNotes(newValue, for: entry.id)
-                showSavedToast()
+                scheduleSavedIndicator()
             }
         )
     }
@@ -210,7 +205,7 @@ struct ContentView: View {
             get: { store.config.entry(for: entry.id)?.symbolName ?? entry.symbolName },
             set: { newValue in
                 store.config.updateSymbol(newValue, for: entry.id)
-                showSavedToast()
+                scheduleSavedIndicator()
             }
         )
     }
