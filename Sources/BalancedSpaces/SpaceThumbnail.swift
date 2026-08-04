@@ -11,13 +11,24 @@ import SwiftUI
 final class SpaceThumbnailCache {
     static let shared = SpaceThumbnailCache()
     private var images: [UInt64: NSImage] = [:]
+    private var didRequestAccess = false
 
     func image(for id: UInt64) -> NSImage? {
         images[id]
     }
 
+    /// Screen Recording (not Accessibility) permission gates this. Only ask
+    /// once per launch — re-requesting on every Space switch is what causes
+    /// the prompt to reappear repeatedly even after it's been granted.
     func captureCurrentSpace(id: UInt64) {
         guard id != 0 else { return }
+        guard CGPreflightScreenCaptureAccess() else {
+            if !didRequestAccess {
+                didRequestAccess = true
+                CGRequestScreenCaptureAccess()
+            }
+            return
+        }
         Task {
             guard let image = try? await Self.captureMainDisplay() else { return }
             images[id] = image

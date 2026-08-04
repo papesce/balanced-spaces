@@ -150,14 +150,23 @@ struct ContentView: View {
                     .foregroundStyle(.red)
             }
             HStack {
-                Button("Export…", action: exportBackup)
-                Button("Import…", action: importBackup)
-                Button("Settings…") { openSettings() }
                 Spacer()
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
+                Menu {
+                    Button("Edit Current Space") { toggleEditing(for: store.currentSpaceID) }
+                    Divider()
+                    Button("Import…", action: importBackup)
+                    Button("Export…", action: exportBackup)
+                    Button("Settings…") { openSettings() }
+                    Divider()
+                    Button("Quit") {
+                        NSApplication.shared.terminate(nil)
+                    }
+                    .keyboardShortcut("q", modifiers: .command)
+                } label: {
+                    Image(systemName: "gearshape")
                 }
-                .keyboardShortcut("q", modifiers: .command)
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
         }
         .padding(10)
