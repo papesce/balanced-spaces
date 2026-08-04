@@ -73,7 +73,6 @@ struct ContentView: View {
         let isEditing = editingEntryID == entry.id
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                SpaceThumbnailView(id: entry.id)
                 if isEditing {
                     IconPickerView(symbolName: symbolBinding(for: entry))
                     TextField("Name", text: nameBinding(for: entry))

@@ -33,6 +33,5 @@ final class SpaceStore {
         currentSpaceID = id
         guard id != 0 else { return }
         config.ensureEntry(for: id)
-        SpaceThumbnailCache.shared.captureCurrentSpace(id: id)
     }
 }
