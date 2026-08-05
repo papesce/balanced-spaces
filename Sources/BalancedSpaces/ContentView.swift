@@ -14,10 +14,12 @@ struct ContentView: View {
     @State private var draftNotes = ""
     @State private var draftSymbolName: String?
     @State private var isRowHovered = false
+    @State private var showAllSpaces = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             spacesSection
+            allSpacesSection
             Divider()
             footer
         }
@@ -85,6 +87,50 @@ struct ContentView: View {
                     .padding(12)
             }
         }
+    }
+
+    private var namedSpaceEntries: [SpaceConfig.SpaceEntry] {
+        store.config.sortedEntries.filter { !$0.name.isEmpty || !$0.notes.isEmpty || $0.symbolName != nil }
+    }
+
+    private var allSpacesSection: some View {
+        Group {
+            if !namedSpaceEntries.isEmpty {
+                DisclosureGroup("All Spaces (\(namedSpaceEntries.count))", isExpanded: $showAllSpaces) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(namedSpaceEntries) { entry in
+                                allSpacesRow(entry)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 180)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+        }
+    }
+
+    private func allSpacesRow(_ entry: SpaceConfig.SpaceEntry) -> some View {
+        let isCurrent = entry.id == store.currentSpaceID
+        return HStack(spacing: 6) {
+            Image(systemName: entry.symbolName ?? "circle")
+                .font(.system(size: 12))
+                .frame(width: 16)
+                .foregroundStyle(.secondary)
+            Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
+                .font(.callout)
+                .fontWeight(isCurrent ? .semibold : .regular)
+                .foregroundStyle(entry.name.isEmpty ? .tertiary : .primary)
+            Spacer()
+            if isCurrent {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private func spaceRow(_ entry: SpaceConfig.SpaceEntry) -> some View {
