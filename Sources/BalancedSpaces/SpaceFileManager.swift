@@ -14,8 +14,32 @@ struct SpaceFile: Codable {
     let formatVersion: Int
     let savedAt: Date
     let name: String
+    let description: String
     let notes: String
     let symbolName: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case formatVersion, savedAt, name, description, notes, symbolName
+    }
+
+    init(formatVersion: Int, savedAt: Date, name: String, description: String, notes: String, symbolName: String?) {
+        self.formatVersion = formatVersion
+        self.savedAt = savedAt
+        self.name = name
+        self.description = description
+        self.notes = notes
+        self.symbolName = symbolName
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        formatVersion = try container.decode(Int.self, forKey: .formatVersion)
+        savedAt = try container.decode(Date.self, forKey: .savedAt)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        notes = try container.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        symbolName = try container.decodeIfPresent(String.self, forKey: .symbolName)
+    }
 }
 
 @MainActor
@@ -28,6 +52,7 @@ final class SpaceFileManager {
             formatVersion: SpaceFile.currentVersion,
             savedAt: Date(),
             name: entry.name,
+            description: entry.description,
             notes: entry.notes,
             symbolName: entry.symbolName
         )
@@ -66,6 +91,7 @@ final class SpaceFileManager {
 
     func apply(_ file: SpaceFile, toSpaceID id: UInt64, config: SpaceConfig) {
         config.updateName(file.name, for: id)
+        config.updateDescription(file.description, for: id)
         config.updateNotes(file.notes, for: id)
         config.updateSymbol(file.symbolName, for: id)
     }

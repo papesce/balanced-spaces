@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var saveIndicatorTask: Task<Void, Never>?
     @State private var isEditingRow = false
     @State private var draftName = ""
+    @State private var draftDescription = ""
     @State private var draftNotes = ""
     @State private var draftSymbolName: String?
     @State private var isRowHovered = false
@@ -44,7 +45,7 @@ struct ContentView: View {
         guard store.currentEntry != nil else { return }
         let alert = NSAlert()
         alert.messageText = "Clear this Space?"
-        alert.informativeText = "This removes the name, notes, and icon for the current Space. This can't be undone."
+        alert.informativeText = "This removes the name, description, notes, and icon for the current Space. This can't be undone."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Clear")
         alert.addButton(withTitle: "Cancel")
@@ -56,6 +57,7 @@ struct ContentView: View {
     private func clearCurrentSpace() {
         guard let id = store.currentSpaceID else { return }
         store.config.updateName("", for: id)
+        store.config.updateDescription("", for: id)
         store.config.updateNotes("", for: id)
         store.config.updateSymbol(nil, for: id)
         scheduleSavedIndicator()
@@ -100,7 +102,7 @@ struct ContentView: View {
     private var unavailableSpaceEntries: [SpaceConfig.SpaceEntry] {
         guard store.liveSpaceIDs != nil else { return [] }
         return store.config.sortedEntries.filter {
-            !$0.name.isEmpty || !$0.notes.isEmpty || $0.symbolName != nil
+            !$0.name.isEmpty || !$0.description.isEmpty || !$0.notes.isEmpty || $0.symbolName != nil
         }.filter { store.isStale($0) }
     }
 
@@ -118,7 +120,7 @@ struct ContentView: View {
                             }
                         }
                     }
-                    .frame(height: min(CGFloat(liveSpaceEntries.count * 24), 180))
+                    .frame(height: min(CGFloat(liveSpaceEntries.count * 34), 180))
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
@@ -156,15 +158,23 @@ struct ContentView: View {
 
     private func allSpacesRow(_ entry: SpaceConfig.SpaceEntry) -> some View {
         let isCurrent = entry.id == store.currentSpaceID
-        return HStack(spacing: 6) {
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: entry.symbolName ?? "circle")
                 .font(.system(size: 12))
                 .frame(width: 16)
                 .foregroundStyle(.secondary)
-            Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
-                .font(.callout)
-                .fontWeight(isCurrent ? .semibold : .regular)
-                .foregroundStyle(entry.name.isEmpty ? .tertiary : .primary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
+                    .font(.callout)
+                    .fontWeight(isCurrent ? .semibold : .regular)
+                    .foregroundStyle(entry.name.isEmpty ? .tertiary : .primary)
+                if !entry.description.isEmpty {
+                    Text(entry.description)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
             Spacer()
             if isCurrent {
                 Image(systemName: "checkmark")
@@ -189,10 +199,10 @@ struct ContentView: View {
                     if isEditingRow {
                         TextField("Untitled Space", text: $draftName)
                             .textFieldStyle(.plain)
-                            .font(.headline)
+                            .font(.title3)
                     } else {
                         Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
-                            .font(.headline)
+                            .font(.title3)
                             .foregroundStyle(entry.name.isEmpty ? .tertiary : .primary)
                     }
                     Spacer()
@@ -223,8 +233,12 @@ struct ContentView: View {
                     }
                 }
                 if isEditingRow {
+                    TextField("Description…", text: $draftDescription)
+                        .textFieldStyle(.plain)
+                        .font(.callout)
                     MarkdownNotesEditor(text: $draftNotes, placeholder: "Notes…", minHeight: 100, maxHeight: 220)
                 } else {
+                    DescriptionPlainTextView(text: entry.description)
                     NotesPlainTextView(text: entry.notes)
                 }
             }
@@ -238,6 +252,7 @@ struct ContentView: View {
 
     private func beginEditing(with entry: SpaceConfig.SpaceEntry) {
         draftName = entry.name
+        draftDescription = entry.description
         draftNotes = entry.notes
         draftSymbolName = entry.symbolName
         isEditingRow = true
@@ -245,7 +260,7 @@ struct ContentView: View {
 
     private func commitEdit(for entry: SpaceConfig.SpaceEntry) {
         store.config.restore(
-            SpaceConfig.SpaceEntry(id: entry.id, name: draftName, notes: draftNotes, symbolName: draftSymbolName)
+            SpaceConfig.SpaceEntry(id: entry.id, name: draftName, description: draftDescription, notes: draftNotes, symbolName: draftSymbolName)
         )
         scheduleSavedIndicator()
         isEditingRow = false
@@ -353,10 +368,10 @@ struct ContentView: View {
         guard let currentID = store.currentSpaceID,
               let current = store.currentEntry else { return }
 
-        if !current.name.isEmpty || !current.notes.isEmpty || current.symbolName != nil {
+        if !current.name.isEmpty || !current.description.isEmpty || !current.notes.isEmpty || current.symbolName != nil {
             let alert = NSAlert()
             alert.messageText = "Replace Current Space?"
-            alert.informativeText = "This will replace the current Space’s name, notes, and icon with the saved settings from “\(source.name.isEmpty ? "Untitled Space" : source.name)”."
+            alert.informativeText = "This will replace the current Space’s name, description, notes, and icon with the saved settings from “\(source.name.isEmpty ? "Untitled Space" : source.name)”."
             alert.alertStyle = .warning
             alert.addButton(withTitle: "Replace")
             alert.addButton(withTitle: "Cancel")
@@ -371,7 +386,7 @@ struct ContentView: View {
         let name = entry.name.isEmpty ? "Untitled Space" : entry.name
         let alert = NSAlert()
         alert.messageText = "Clear Saved Space?"
-        alert.informativeText = "The saved name, notes, and icon for “\(name)” will be permanently deleted. This will not affect macOS Spaces."
+        alert.informativeText = "The saved name, description, notes, and icon for “\(name)” will be permanently deleted. This will not affect macOS Spaces."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Clear")
         alert.addButton(withTitle: "Cancel")

@@ -7,14 +7,29 @@ final class SpaceConfig {
     struct SpaceEntry: Codable, Identifiable, Equatable {
         let id: UInt64
         var name: String
+        var description: String
         var notes: String
         var symbolName: String?
 
-        init(id: UInt64, name: String = "", notes: String = "", symbolName: String? = nil) {
+        init(id: UInt64, name: String = "", description: String = "", notes: String = "", symbolName: String? = nil) {
             self.id = id
             self.name = name
+            self.description = description
             self.notes = notes
             self.symbolName = symbolName
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, name, notes, symbolName, description
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(UInt64.self, forKey: .id)
+            name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+            description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+            notes = try container.decodeIfPresent(String.self, forKey: .notes) ?? ""
+            symbolName = try container.decodeIfPresent(String.self, forKey: .symbolName)
         }
     }
 
@@ -67,6 +82,13 @@ final class SpaceConfig {
         save()
     }
 
+    func updateDescription(_ description: String, for id: UInt64) {
+        guard var entry = entries[id] else { return }
+        entry.description = description
+        entries[id] = entry
+        save()
+    }
+
     func updateSymbol(_ symbolName: String?, for id: UInt64) {
         guard var entry = entries[id] else { return }
         entry.symbolName = symbolName
@@ -84,6 +106,7 @@ final class SpaceConfig {
         entries[id] = SpaceEntry(
             id: id,
             name: source.name,
+            description: source.description,
             notes: source.notes,
             symbolName: source.symbolName
         )

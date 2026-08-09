@@ -63,3 +63,18 @@ struct NotesPlainTextView: View {
         return AttributedString(storage)
     }
 }
+
+/// Static, non-editable description display for the read-only row state.
+struct DescriptionPlainTextView: View {
+    let text: String
+
+    var body: some View {
+        if !text.isEmpty {
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
