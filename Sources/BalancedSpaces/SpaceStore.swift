@@ -40,6 +40,9 @@ final class SpaceStore {
 
     func refreshSpaceStatus() {
         liveSpaceIDs = SpaceWatcher.currentSpaceIDs()
+        for id in liveSpaceIDs ?? [] {
+            config.ensureEntry(for: id)
+        }
     }
 
     func isStale(_ entry: SpaceConfig.SpaceEntry) -> Bool {
