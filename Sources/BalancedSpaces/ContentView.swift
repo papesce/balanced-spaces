@@ -141,8 +141,7 @@ struct ContentView: View {
                                 UnavailableSpaceRow(
                                     entry: entry,
                                     canAssign: store.currentEntry != nil,
-                                    onClear: { confirmRemove(entry) },
-                                    onSave: { backup(entry) },
+                                    onSaveAndClear: { saveAndClear(entry) },
                                     onCopyToCurrent: { reassign(entry) }
                                 )
                             }
@@ -312,23 +311,32 @@ struct ContentView: View {
 
     private func saveCurrentSpace() {
         guard let entry = store.currentEntry else { return }
-        backup(entry)
+        _ = backup(entry)
     }
 
-    private func backup(_ entry: SpaceConfig.SpaceEntry) {
+    private func backup(_ entry: SpaceConfig.SpaceEntry) -> Bool {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.balancedSpace]
-        let baseName = entry.name.isEmpty ? "Untitled Space" : entry.name
+        let baseName = (entry.name.isEmpty ? "Untitled Space" : entry.name)
+            .replacingOccurrences(of: " ", with: "-")
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
         let stamp = formatter.string(from: Date())
         panel.nameFieldStringValue = "\(baseName) \(stamp).balancedspace"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
         do {
             try fileManager.save(entry: entry, to: url)
             saveLoadError = nil
+            return true
         } catch {
             saveLoadError = "Save failed: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    private func saveAndClear(_ entry: SpaceConfig.SpaceEntry) {
+        if backup(entry) {
+            store.config.delete(id: entry.id)
         }
     }
 
@@ -382,25 +390,12 @@ struct ContentView: View {
         scheduleSavedIndicator()
     }
 
-    private func confirmRemove(_ entry: SpaceConfig.SpaceEntry) {
-        let name = entry.name.isEmpty ? "Untitled Space" : entry.name
-        let alert = NSAlert()
-        alert.messageText = "Clear Saved Space?"
-        alert.informativeText = "The saved name, description, notes, and icon for “\(name)” will be permanently deleted. This will not affect macOS Spaces."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Clear")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        store.config.delete(id: entry.id)
-    }
-
 }
 
 private struct UnavailableSpaceRow: View {
     let entry: SpaceConfig.SpaceEntry
     let canAssign: Bool
-    let onClear: () -> Void
-    let onSave: () -> Void
+    let onSaveAndClear: () -> Void
     let onCopyToCurrent: () -> Void
     @State private var isHovered = false
 
@@ -418,8 +413,7 @@ private struct UnavailableSpaceRow: View {
             // prevents the row's hover area from moving when the control appears,
             // so it can be reached from the label without losing the hover state.
             Menu {
-                Button("Clear…", role: .destructive, action: onClear)
-                Button("Save…", action: onSave)
+                Button("Save and Clear…", action: onSaveAndClear)
                 Button("Copy to Current", action: onCopyToCurrent)
                     .disabled(!canAssign)
             } label: {
