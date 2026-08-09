@@ -19,6 +19,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 0) {
             spacesSection
             allSpacesSection
+            unavailableSpacesSection
             Divider()
             footer
         }
@@ -117,7 +118,35 @@ struct ContentView: View {
                             }
                         }
                     }
-                    .frame(maxHeight: 180)
+                    .frame(height: min(CGFloat(liveSpaceEntries.count * 24), 180))
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+        }
+    }
+
+    private var unavailableSpacesSection: some View {
+        Group {
+            if !unavailableSpaceEntries.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Unavailable Spaces (\(unavailableSpaceEntries.count))")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(unavailableSpaceEntries) { entry in
+                                UnavailableSpaceRow(
+                                    entry: entry,
+                                    canAssign: store.currentEntry != nil,
+                                    onClear: { confirmRemove(entry) },
+                                    onSave: { backup(entry) },
+                                    onCopyToCurrent: { reassign(entry) }
+                                )
+                            }
+                        }
+                    }
+                    .frame(height: min(CGFloat(unavailableSpaceEntries.count * 24), 144))
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
@@ -201,7 +230,9 @@ struct ContentView: View {
             }
         }
         .padding(8)
-        .onHover { isRowHovered = $0 }
+        .onContinuousHover { phase in
+            if case .active = phase { isRowHovered = true } else { isRowHovered = false }
+        }
         .onExitCommand { cancelEdit() }
     }
 
@@ -238,24 +269,6 @@ struct ContentView: View {
                         store.refreshSpaceStatus()
                     }
                     Divider()
-                    if !unavailableSpaceEntries.isEmpty {
-                        ForEach(unavailableSpaceEntries) { entry in
-                            let name = entry.name.isEmpty ? "Untitled Space" : entry.name
-                            Menu(name) {
-                                Button("Forget") {
-                                    confirmRemove(entry)
-                                }
-                                Button("Backup…") {
-                                    backup(entry)
-                                }
-                                Button("Assign to Current") {
-                                    reassign(entry)
-                                }
-                                .disabled(store.currentEntry == nil)
-                            }
-                        }
-                        Divider()
-                    }
                     Button("Save Current Space…", action: saveCurrentSpace)
                         .disabled(store.currentEntry == nil)
                     Button("Save All Spaces…", action: saveAllSpaces)
@@ -291,7 +304,10 @@ struct ContentView: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.balancedSpace]
         let baseName = entry.name.isEmpty ? "Untitled Space" : entry.name
-        panel.nameFieldStringValue = "\(baseName).balancedspace"
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
+        let stamp = formatter.string(from: Date())
+        panel.nameFieldStringValue = "\(baseName) \(stamp).balancedspace"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try fileManager.save(entry: entry, to: url)
@@ -354,13 +370,57 @@ struct ContentView: View {
     private func confirmRemove(_ entry: SpaceConfig.SpaceEntry) {
         let name = entry.name.isEmpty ? "Untitled Space" : entry.name
         let alert = NSAlert()
-        alert.messageText = "Remove Saved Space?"
+        alert.messageText = "Clear Saved Space?"
         alert.informativeText = "The saved name, notes, and icon for “\(name)” will be permanently deleted. This will not affect macOS Spaces."
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Remove")
+        alert.addButton(withTitle: "Clear")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         store.config.delete(id: entry.id)
     }
 
+}
+
+private struct UnavailableSpaceRow: View {
+    let entry: SpaceConfig.SpaceEntry
+    let canAssign: Bool
+    let onClear: () -> Void
+    let onSave: () -> Void
+    let onCopyToCurrent: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: entry.symbolName ?? "circle")
+                .font(.system(size: 12))
+                .frame(width: 16)
+                .foregroundStyle(.secondary)
+            Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
+                .font(.callout)
+                .foregroundStyle(entry.name.isEmpty ? .tertiary : .primary)
+            Spacer()
+            // Keep the control in the layout even when it is hidden. This
+            // prevents the row's hover area from moving when the control appears,
+            // so it can be reached from the label without losing the hover state.
+            Menu {
+                Button("Clear…", role: .destructive, action: onClear)
+                Button("Save…", action: onSave)
+                Button("Copy to Current", action: onCopyToCurrent)
+                    .disabled(!canAssign)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 14))
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .opacity(isHovered ? 1 : 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+    }
 }
