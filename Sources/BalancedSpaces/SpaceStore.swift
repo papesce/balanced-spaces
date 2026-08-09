@@ -7,6 +7,7 @@ final class SpaceStore {
     let config: SpaceConfig
     private let watcher: SpaceWatcher
     private(set) var currentSpaceID: UInt64?
+    private(set) var liveSpaceIDs: Set<UInt64>?
 
     init(config: SpaceConfig = SpaceConfig()) {
         self.config = config
@@ -15,6 +16,7 @@ final class SpaceStore {
             self?.spaceDidChange()
         }
         spaceDidChange()
+        refreshSpaceStatus()
     }
 
     var currentSpaceName: String {
@@ -31,7 +33,17 @@ final class SpaceStore {
     func spaceDidChange() {
         let id = SpaceWatcher.currentSpaceID()
         currentSpaceID = id
+        refreshSpaceStatus()
         guard id != 0 else { return }
         config.ensureEntry(for: id)
+    }
+
+    func refreshSpaceStatus() {
+        liveSpaceIDs = SpaceWatcher.currentSpaceIDs()
+    }
+
+    func isStale(_ entry: SpaceConfig.SpaceEntry) -> Bool {
+        guard let liveSpaceIDs else { return false }
+        return !liveSpaceIDs.contains(entry.id)
     }
 }

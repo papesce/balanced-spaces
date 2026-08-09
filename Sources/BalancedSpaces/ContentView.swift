@@ -15,11 +15,13 @@ struct ContentView: View {
     @State private var draftSymbolName: String?
     @State private var isRowHovered = false
     @State private var showAllSpaces = false
+    @State private var showUnavailableSpaces = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             spacesSection
             allSpacesSection
+            unavailableSpacesSection
             Divider()
             footer
         }
@@ -90,7 +92,16 @@ struct ContentView: View {
     }
 
     private var namedSpaceEntries: [SpaceConfig.SpaceEntry] {
-        store.config.sortedEntries.filter { !$0.name.isEmpty || !$0.notes.isEmpty || $0.symbolName != nil }
+        store.config.sortedEntries.filter {
+            !$0.name.isEmpty || !$0.notes.isEmpty || $0.symbolName != nil
+        }.filter { !store.isStale($0) }
+    }
+
+    private var unavailableSpaceEntries: [SpaceConfig.SpaceEntry] {
+        guard store.liveSpaceIDs != nil else { return [] }
+        return store.config.sortedEntries.filter {
+            !$0.name.isEmpty || !$0.notes.isEmpty || $0.symbolName != nil
+        }.filter { store.isStale($0) }
     }
 
     private var allSpacesSection: some View {
@@ -129,6 +140,65 @@ struct ContentView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var unavailableSpacesSection: some View {
+        Group {
+            if !unavailableSpaceEntries.isEmpty {
+                DisclosureGroup("Unavailable Spaces (\(unavailableSpaceEntries.count))", isExpanded: $showUnavailableSpaces) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("These saved Spaces no longer exist on this Mac.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Remove All…") {
+                                confirmRemoveAllUnavailableSpaces()
+                            }
+                            .font(.caption)
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.secondary)
+                        }
+                        ForEach(unavailableSpaceEntries) { entry in
+                            unavailableSpaceRow(entry)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+        }
+    }
+
+    private func unavailableSpaceRow(_ entry: SpaceConfig.SpaceEntry) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: entry.symbolName ?? "circle")
+                .font(.system(size: 12))
+                .frame(width: 16)
+                .foregroundStyle(.secondary)
+            Text(entry.name.isEmpty ? "Untitled Space" : entry.name)
+                .font(.callout)
+                .lineLimit(1)
+            Spacer()
+            Button("Use for Current") {
+                reassign(entry)
+            }
+            .font(.caption)
+            .buttonStyle(.borderless)
+            .disabled(store.currentEntry == nil)
+            Button {
+                confirmRemove(entry)
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Remove saved Space")
+            .accessibilityLabel("Remove saved Space")
         }
         .padding(.vertical, 2)
     }
@@ -221,6 +291,10 @@ struct ContentView: View {
             HStack {
                 Spacer()
                 Menu {
+                    Button("Refresh Spaces") {
+                        store.refreshSpaceStatus()
+                    }
+                    Divider()
                     Button("Save Current Space…", action: saveCurrentSpace)
                         .disabled(store.currentEntry == nil)
                     Button("Save All Spaces…", action: saveAllSpaces)
@@ -291,6 +365,51 @@ struct ContentView: View {
             saveLoadError = nil
         } catch {
             saveLoadError = "Load failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func reassign(_ source: SpaceConfig.SpaceEntry) {
+        guard let currentID = store.currentSpaceID,
+              let current = store.currentEntry else { return }
+
+        if !current.name.isEmpty || !current.notes.isEmpty || current.symbolName != nil {
+            let alert = NSAlert()
+            alert.messageText = "Replace Current Space?"
+            alert.informativeText = "This will replace the current Space’s name, notes, and icon with the saved settings from “\(source.name.isEmpty ? "Untitled Space" : source.name)”."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Replace")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+
+        store.config.copy(source, to: currentID)
+        scheduleSavedIndicator()
+    }
+
+    private func confirmRemove(_ entry: SpaceConfig.SpaceEntry) {
+        let name = entry.name.isEmpty ? "Untitled Space" : entry.name
+        let alert = NSAlert()
+        alert.messageText = "Remove Saved Space?"
+        alert.informativeText = "The saved name, notes, and icon for “\(name)” will be permanently deleted. This will not affect macOS Spaces."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Remove")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        store.config.delete(id: entry.id)
+    }
+
+    private func confirmRemoveAllUnavailableSpaces() {
+        let count = unavailableSpaceEntries.count
+        let alert = NSAlert()
+        alert.messageText = "Remove All Unavailable Spaces?"
+        alert.informativeText = "This will permanently delete the saved name, notes, and icon for all " + String(count) + " unavailable Spaces. This will not affect macOS Spaces."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Remove All")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        for entry in unavailableSpaceEntries {
+            store.config.delete(id: entry.id)
         }
     }
 

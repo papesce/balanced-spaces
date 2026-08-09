@@ -80,6 +80,16 @@ final class SpaceConfig {
         save()
     }
 
+    func copy(_ source: SpaceEntry, to id: UInt64) {
+        entries[id] = SpaceEntry(
+            id: id,
+            name: source.name,
+            notes: source.notes,
+            symbolName: source.symbolName
+        )
+        save()
+    }
+
     func delete(id: UInt64) {
         entries.removeValue(forKey: id)
         save()
