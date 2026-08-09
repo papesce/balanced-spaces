@@ -220,15 +220,22 @@ struct ContentView: View {
                             .font(.caption)
                             .buttonStyle(.plain)
                             .foregroundStyle(.secondary)
-                    } else if isRowHovered {
-                        Button { beginEditing(with: entry) } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 12))
+                    } else {
+                        Menu {
+                            Button("Edit…", action: { beginEditing(with: entry) })
+                            Button("Save…", action: { _ = backup(entry) })
+                            Button("Load…", action: loadSpace)
+                            Button("Save and Clear…", action: saveAndClearCurrentSpace)
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.system(size: 14))
+                                .frame(width: 22, height: 22)
+                                .contentShape(Rectangle())
                                 .foregroundStyle(.secondary)
                         }
-                        .buttonStyle(.plain)
-                        .help("Edit this Space")
-                        .accessibilityLabel("Edit this Space")
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .opacity(isRowHovered ? 1 : 0)
                     }
                 }
                 if isEditingRow {
@@ -283,17 +290,7 @@ struct ContentView: View {
                         store.refreshSpaceStatus()
                     }
                     Divider()
-                    Button("Save Current Space…", action: saveCurrentSpace)
-                        .disabled(store.currentEntry == nil)
                     Button("Save All Spaces…", action: saveAllSpaces)
-                    Divider()
-                    Button("Load Space…", action: loadSpace)
-                        .disabled(store.currentEntry == nil)
-                    Divider()
-                    Menu("Danger Zone") {
-                        Button("Clear Current Space…", action: confirmClearCurrentSpace)
-                            .disabled(store.currentEntry == nil)
-                    }
                     Divider()
                     Button("Quit") {
                         NSApplication.shared.terminate(nil)
@@ -309,9 +306,11 @@ struct ContentView: View {
         .padding(10)
     }
 
-    private func saveCurrentSpace() {
+    private func saveAndClearCurrentSpace() {
         guard let entry = store.currentEntry else { return }
-        _ = backup(entry)
+        if backup(entry) {
+            confirmClearCurrentSpace()
+        }
     }
 
     private func backup(_ entry: SpaceConfig.SpaceEntry) -> Bool {
