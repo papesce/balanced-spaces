@@ -36,7 +36,7 @@ struct ContentView: View {
             if showIconPicker {
                 IconPickerDismissScrim(isExpanded: $showIconPicker)
                 IconPickerPanel(symbolName: $draftSymbolName, isExpanded: $showIconPicker)
-                    .offset(x: 20, y: 46)
+                    .offset(x: 12, y: 40)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
@@ -163,14 +163,13 @@ struct ContentView: View {
                                 allSpacesRow(entry)
                             }
                         }
-                        .background(
-                            GeometryReader { proxy in
-                                Color.clear.preference(key: ContentHeightKey.self, value: proxy.size.height)
-                            }
-                        )
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { newHeight in
+                            allSpacesContentHeight = newHeight
+                        }
                     }
-                    .onPreferenceChange(ContentHeightKey.self) { allSpacesContentHeight = $0 }
-                    .frame(height: min(allSpacesContentHeight > 0 ? allSpacesContentHeight : CGFloat(liveSpaceEntries.count * 34), 400))
+                    .frame(height: min(allSpacesContentHeight > 0 ? ceil(allSpacesContentHeight) : CGFloat(liveSpaceEntries.count * 34), 400))
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
@@ -197,14 +196,13 @@ struct ContentView: View {
                                 )
                             }
                         }
-                        .background(
-                            GeometryReader { proxy in
-                                Color.clear.preference(key: ContentHeightKey.self, value: proxy.size.height)
-                            }
-                        )
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { newHeight in
+                            unavailableSpacesContentHeight = newHeight
+                        }
                     }
-                    .onPreferenceChange(ContentHeightKey.self) { unavailableSpacesContentHeight = $0 }
-                    .frame(height: min(unavailableSpacesContentHeight > 0 ? unavailableSpacesContentHeight : CGFloat(unavailableSpaceEntries.count * 24), 144))
+                    .frame(height: min(unavailableSpacesContentHeight > 0 ? ceil(unavailableSpacesContentHeight) : CGFloat(unavailableSpaceEntries.count * 24), 144))
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
@@ -306,7 +304,6 @@ struct ContentView: View {
                 }
             }
         }
-        .padding(8)
         .onContinuousHover { phase in
             if case .active = phase { isRowHovered = true } else { isRowHovered = false }
         }
@@ -363,7 +360,9 @@ struct ContentView: View {
                 .fixedSize()
             }
         }
-        .padding(10)
+        .padding(.leading, 12)
+        .padding(.trailing, 34)
+        .padding(.vertical, 8)
     }
 
     private func saveAndClearCurrentSpace() {
@@ -490,17 +489,5 @@ private struct UnavailableSpaceRow: View {
         .padding(.vertical, 2)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-    }
-}
-
-/// Reports a view's measured height up to an ancestor, so a `ScrollView`
-/// can be sized to its content's actual height (rows vary in height, e.g.
-/// when a description wraps) instead of an estimated row-height guess,
-/// which otherwise leaves a sliver of visible scrollbar even when
-/// everything fits.
-private struct ContentHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }

@@ -17,8 +17,8 @@ struct MarkdownNotesEditor: View {
                     Text(placeholder)
                         .font(.callout)
                         .foregroundStyle(.tertiary)
-                        .padding(.top, 8)
-                        .padding(.leading, 9)
+                        .padding(.top, 6)
+                        .padding(.leading, 4)
                         .allowsHitTesting(false)
                 }
             }
