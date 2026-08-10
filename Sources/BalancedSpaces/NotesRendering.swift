@@ -238,8 +238,10 @@ final class NotesTextView: NSTextView {
     override var intrinsicContentSize: NSSize {
         guard let layoutManager, let textContainer else { return super.intrinsicContentSize }
         layoutManager.ensureLayout(for: textContainer)
-        let used = layoutManager.usedRect(for: textContainer)
-        return NSSize(width: NSView.noIntrinsicMetric, height: used.height + textContainerInset.height * 2 + 2)
+        let glyphRange = layoutManager.glyphRange(for: textContainer)
+        let textRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        let height = ceil(textRect.height) + textContainerInset.height * 2
+        return NSSize(width: NSView.noIntrinsicMetric, height: height)
     }
 
     func refit() {
@@ -250,12 +252,11 @@ final class NotesTextView: NSTextView {
             layoutManager.ensureLayout(for: textContainer)
         }
         invalidateIntrinsicContentSize()
-        frame.size.height = intrinsicContentSize.height
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        refit()
+        invalidateIntrinsicContentSize()
     }
 }
 
