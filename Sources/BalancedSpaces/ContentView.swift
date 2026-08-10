@@ -284,6 +284,9 @@ struct ContentView: View {
                     .foregroundStyle(.red)
             }
             HStack {
+                Text("v\(AppInfo.version)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                 Spacer()
                 Menu {
                     Button("Refresh Spaces") {
@@ -291,6 +294,10 @@ struct ContentView: View {
                     }
                     Divider()
                     Button("Save All Spaces…", action: saveAllSpaces)
+                    Divider()
+                    SettingsLink {
+                        Text("Settings…")
+                    }
                     Divider()
                     Button("Quit") {
                         NSApplication.shared.terminate(nil)
