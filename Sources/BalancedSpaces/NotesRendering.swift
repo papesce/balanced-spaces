@@ -3,10 +3,11 @@ import AppKit
 import SwiftUI
 
 /// Applies lightweight notes affordances directly onto a live `NSTextStorage`:
-/// `==highlighted==` spans get a highlight background, detected URLs and
-/// `[label](destination)` links become clickable, and backticked folder paths
-/// open Terminal. Not Markdown — just enough for notes. Safe to call on every
-/// keystroke since it preserves selection and the base font.
+/// `==highlighted==` spans get a highlight background and detected URLs become
+/// clickable. `[label](destination)` links are deliberately left plain while
+/// editing — they only become clickable in the read-only display. Not Markdown —
+/// just enough for notes. Safe to call on every keystroke since it preserves
+/// selection and the base font.
 func applyNotesHighlighting(to storage: NSTextStorage) {
     let fullRange = NSRange(location: 0, length: storage.length)
     let baseFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
@@ -39,30 +40,20 @@ func applyNotesHighlighting(to storage: NSTextStorage) {
         }
     }
 
-    if let backtickRegex = try? NSRegularExpression(pattern: "`([^`\\n]*)`") {
-        let matches = backtickRegex.matches(in: storage.string, options: [], range: fullRange)
-        for match in matches {
-            let pathRange = match.range(at: 1)
-            let path = (storage.string as NSString).substring(with: pathRange)
-            guard !path.isEmpty, let url = TerminalLink.makeURL(for: path) else { continue }
-            storage.addAttribute(.link, value: url, range: match.range)
-            storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: match.range)
-        }
-    }
-
+    // `[label](destination)` links stay plain while editing so clicks position
+    // the cursor. This also strips any link the auto-detector found inside the
+    // destination (e.g. the URL in `[Docs](https://example.com)`).
     for match in NoteLink.regex.matches(in: storage.string, options: [], range: fullRange) {
-        let destination = nsText.substring(with: match.range(at: 2))
-        guard let url = NoteLink.makeURL(for: destination) else { continue }
-        storage.addAttribute(.link, value: url, range: match.range)
-        storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: match.range)
+        storage.removeAttribute(.link, range: match.range)
+        storage.removeAttribute(.underlineStyle, range: match.range)
     }
     storage.endEditing()
 }
 
 /// Builds the read-only notes display: `[label](destination)` links collapse to
-/// just `label` (clickable), while everything else keeps the usual highlights,
-/// backticks, and auto-detected URLs.
-func renderedNotesDisplay(_ text: String) -> AttributedString {
+/// just `label` (clickable, with a tooltip showing the target), while everything
+/// else keeps the usual highlights and auto-detected URLs.
+func renderedNotesDisplay(_ text: String) -> NSMutableAttributedString {
     let nsText = text as NSString
     let output = NSMutableAttributedString()
     var cursor = 0
@@ -79,6 +70,7 @@ func renderedNotesDisplay(_ text: String) -> AttributedString {
                 .font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
                 .link: url,
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .toolTip: destination,
             ]))
         } else {
             appendHighlightedSegment(nsText.substring(with: match.range), to: output)
@@ -90,7 +82,7 @@ func renderedNotesDisplay(_ text: String) -> AttributedString {
         appendHighlightedSegment(nsText.substring(with: NSRange(location: cursor, length: nsText.length - cursor)), to: output)
     }
 
-    return AttributedString(output)
+    return output
 }
 
 private func appendHighlightedSegment(_ segment: String, to output: NSMutableAttributedString) {
@@ -126,9 +118,10 @@ enum NoteLink {
     }
 }
 
-/// A clickable folder shortcut: a backticked path in notes (e.g. `` `~/dev/project` ``)
-/// opens Terminal.app with that folder as the working directory. Paths are carried
-/// through a custom URL scheme so normal web links keep their default behavior.
+/// A clickable folder shortcut: a folder path in a `[label](~/dev/project)` link
+/// opens Terminal.app with that folder as the working directory. Paths are
+/// carried through a custom URL scheme so normal web links keep their default
+/// behavior.
 enum TerminalLink {
     static let scheme = "balanced-spaces-open-terminal"
 
@@ -191,6 +184,81 @@ enum TerminalLink {
     }
 }
 
+/// Read-only notes display backed by `NSTextView`, so links get native macOS
+/// hover feedback: a pointing-hand cursor and a tooltip with the destination.
+/// Clicking routes terminal links to `TerminalLink` and lets everything else
+/// fall through to the default browser behavior.
+struct NotesDisplayTextView: NSViewRepresentable {
+    let text: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NotesTextView {
+        let textView = NotesTextView()
+        textView.delegate = context.coordinator
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.drawsBackground = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainerInset = NSSize(width: 0, height: 1)
+        textView.allowsUndo = false
+        textView.textStorage?.setAttributedString(renderedNotesDisplay(text))
+        textView.refit()
+        return textView
+    }
+
+    func updateNSView(_ textView: NotesTextView, context: Context) {
+        if textView.string != text {
+            textView.textStorage?.setAttributedString(renderedNotesDisplay(text))
+            textView.refit()
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            guard let url = link as? URL, let path = TerminalLink.path(from: url) else { return false }
+            TerminalLink.open(at: path)
+            return true
+        }
+    }
+}
+
+/// `NSTextView` subclass that sizes itself to its laid-out text so SwiftUI can
+/// place it in the popover without a fixed height.
+final class NotesTextView: NSTextView {
+    private var isRefitting = false
+
+    override var intrinsicContentSize: NSSize {
+        guard let layoutManager, let textContainer else { return super.intrinsicContentSize }
+        layoutManager.ensureLayout(for: textContainer)
+        let used = layoutManager.usedRect(for: textContainer)
+        return NSSize(width: NSView.noIntrinsicMetric, height: used.height + textContainerInset.height * 2 + 2)
+    }
+
+    func refit() {
+        guard !isRefitting else { return }
+        isRefitting = true
+        defer { isRefitting = false }
+        if let layoutManager, let textContainer {
+            layoutManager.ensureLayout(for: textContainer)
+        }
+        invalidateIntrinsicContentSize()
+        frame.size.height = intrinsicContentSize.height
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        refit()
+    }
+}
+
 /// Static, non-editable notes display for the read-only row state: same
 /// highlighting/link affordances as the editor, but no input chrome.
 struct NotesPlainTextView: View {
@@ -202,22 +270,9 @@ struct NotesPlainTextView: View {
                 .font(.callout)
                 .foregroundStyle(.tertiary)
         } else {
-            Text(attributedText)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
+            NotesDisplayTextView(text: text)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .environment(\.openURL, OpenURLAction { url in
-                    if let path = TerminalLink.path(from: url) {
-                        TerminalLink.open(at: path)
-                        return .handled
-                    }
-                    return .systemAction
-                })
         }
-    }
-
-    private var attributedText: AttributedString {
-        renderedNotesDisplay(text)
     }
 }
 
