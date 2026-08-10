@@ -210,13 +210,15 @@ struct NotesDisplayTextView: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 0, height: 1)
         textView.allowsUndo = false
         textView.textStorage?.setAttributedString(renderedNotesDisplay(text))
+        textView.lastRenderedText = text
         textView.refit()
         return textView
     }
 
     func updateNSView(_ textView: NotesTextView, context: Context) {
-        if textView.string != text {
+        if textView.lastRenderedText != text {
             textView.textStorage?.setAttributedString(renderedNotesDisplay(text))
+            textView.lastRenderedText = text
             textView.refit()
         }
     }
@@ -234,6 +236,10 @@ struct NotesDisplayTextView: NSViewRepresentable {
 /// place it in the popover without a fixed height.
 final class NotesTextView: NSTextView {
     private var isRefitting = false
+    /// The raw source text (before link-label collapsing) this view was last
+    /// built from — `string` itself holds the collapsed display text, so it
+    /// can't be compared against the source to detect real changes.
+    var lastRenderedText: String?
 
     override var intrinsicContentSize: NSSize {
         guard let layoutManager, let textContainer else { return super.intrinsicContentSize }

@@ -24,7 +24,7 @@ struct ContentView: View {
             Divider()
             footer
         }
-        .frame(width: 340)
+        .frame(width: 400)
         .overlay {
             if showIconPicker {
                 IconPickerDismissScrim(isExpanded: $showIconPicker)
@@ -39,6 +39,7 @@ struct ContentView: View {
                 showOnboarding = false
             }
         }
+        .autosizeMenuBarWindow()
     }
 
     private func confirmClearCurrentSpace() {
