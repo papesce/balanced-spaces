@@ -48,6 +48,12 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Section("About") {
+                Text("Balanced Spaces \(AppInfo.version)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(20)
         .frame(width: 380)
@@ -72,4 +78,8 @@ struct SettingsView: View {
 enum MenuBarStyle: String {
     case window
     case menu
+}
+
+enum AppInfo {
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.1"
 }
