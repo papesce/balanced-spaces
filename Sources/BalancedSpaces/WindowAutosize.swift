@@ -26,18 +26,19 @@ private struct MenuBarWindowAccessor: NSViewRepresentable {
 }
 
 /// Forces the menu bar extra's hosting window to re-fit to the SwiftUI
-/// content's actual ideal height whenever that height changes. Needed
-/// because `MenuBarExtra(.window)` grows its window to fit taller content
-/// but does not shrink it back down once the content gets shorter again
-/// while the window stays open (e.g. leaving edit mode) — a known
-/// SwiftUI/AppKit limitation with NSHostingView-backed windows.
+/// content's actual ideal size whenever that size changes. Needed because
+/// `MenuBarExtra(.window)` grows its window to fit larger content but does
+/// not shrink it back down once the content gets smaller again while the
+/// window stays open (e.g. leaving edit mode, or a user-driven width
+/// change) — a known SwiftUI/AppKit limitation with NSHostingView-backed
+/// windows.
 ///
-/// Anchors the top edge (the menu bar side) and grows/shrinks the bottom
-/// edge, since this is a top-anchored dropdown.
+/// Anchors the top-left corner (the menu bar side) and grows/shrinks the
+/// bottom-right, since this is a top-left-anchored dropdown.
 private struct AutosizeMenuBarWindowModifier: ViewModifier {
     @State private var window: NSWindow?
-    @State private var measuredHeight: CGFloat = 0
-    @State private var appliedHeight: CGFloat?
+    @State private var measuredSize: CGSize = .zero
+    @State private var appliedSize: CGSize?
 
     func body(content: Content) -> some View {
         content
@@ -45,11 +46,11 @@ private struct AutosizeMenuBarWindowModifier: ViewModifier {
                 GeometryReader { proxy in
                     Color.clear
                         .onAppear {
-                            measuredHeight = proxy.size.height
+                            measuredSize = proxy.size
                             resizeIfNeeded()
                         }
-                        .onChange(of: proxy.size.height) { _, newHeight in
-                            measuredHeight = newHeight
+                        .onChange(of: proxy.size) { _, newSize in
+                            measuredSize = newSize
                             resizeIfNeeded()
                         }
                 }
@@ -61,23 +62,26 @@ private struct AutosizeMenuBarWindowModifier: ViewModifier {
     }
 
     private func resizeIfNeeded() {
-        guard let window, measuredHeight > 0 else { return }
-        if let appliedHeight, abs(appliedHeight - measuredHeight) < 0.5 { return }
+        guard let window, measuredSize.height > 0, measuredSize.width > 0 else { return }
+        if let appliedSize,
+           abs(appliedSize.width - measuredSize.width) < 0.5,
+           abs(appliedSize.height - measuredSize.height) < 0.5 { return }
 
         let currentFrame = window.frame
-        let isInitialFit = appliedHeight == nil
-        appliedHeight = measuredHeight
+        let isInitialFit = appliedSize == nil
+        appliedSize = measuredSize
 
-        guard abs(currentFrame.height - measuredHeight) > 0.5 else { return }
+        guard abs(currentFrame.width - measuredSize.width) > 0.5
+            || abs(currentFrame.height - measuredSize.height) > 0.5 else { return }
 
-        // Keep the top edge fixed; grow/shrink from the bottom.
+        // Keep the top-left corner fixed; grow/shrink from the bottom-right.
         // `setContentSize` preserves the window's origin (bottom-left
         // corner) instead, which would move the wrong edge here.
         let newFrame = NSRect(
             x: currentFrame.origin.x,
-            y: currentFrame.maxY - measuredHeight,
-            width: currentFrame.width,
-            height: measuredHeight
+            y: currentFrame.maxY - measuredSize.height,
+            width: measuredSize.width,
+            height: measuredSize.height
         )
         window.setFrame(newFrame, display: true, animate: !isInitialFit)
     }

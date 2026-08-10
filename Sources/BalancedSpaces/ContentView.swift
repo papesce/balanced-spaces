@@ -15,6 +15,13 @@ struct ContentView: View {
     @State private var draftNotes = ""
     @State private var draftSymbolName: String?
     @State private var isRowHovered = false
+    @AppStorage("popoverWidth") private var popoverWidth: Double = 400
+    @State private var isResizeHandleHovered = false
+    @State private var dragStartWidth: Double?
+
+    private let popoverWidthRange: ClosedRange<Double> = 340...600
+    @State private var allSpacesContentHeight: CGFloat = 0
+    @State private var unavailableSpacesContentHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -24,7 +31,7 @@ struct ContentView: View {
             Divider()
             footer
         }
-        .frame(width: 400)
+        .frame(width: popoverWidth)
         .overlay {
             if showIconPicker {
                 IconPickerDismissScrim(isExpanded: $showIconPicker)
@@ -33,6 +40,9 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            resizeHandle
+        }
         .sheet(isPresented: $showOnboarding) {
             OnboardingView {
                 UserDefaults.standard.set(true, forKey: "didShowOnboarding")
@@ -40,6 +50,39 @@ struct ContentView: View {
             }
         }
         .autosizeMenuBarWindow()
+    }
+
+    /// Drags horizontally only — height stays automatic (see
+    /// `WindowAutosize.swift`) — to resize the popover, persisting the
+    /// chosen width across launches.
+    private var resizeHandle: some View {
+        Image(systemName: "arrow.left.and.right")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .frame(width: 18, height: 18)
+            .contentShape(Rectangle())
+            .opacity(isResizeHandleHovered ? 1 : 0.35)
+            .padding(4)
+            .onHover { hovering in
+                isResizeHandleHovered = hovering
+                if hovering {
+                    NSCursor.resizeLeftRight.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let startWidth = dragStartWidth ?? popoverWidth
+                        dragStartWidth = startWidth
+                        let proposed = startWidth + value.translation.width
+                        popoverWidth = min(max(proposed, popoverWidthRange.lowerBound), popoverWidthRange.upperBound)
+                    }
+                    .onEnded { _ in
+                        dragStartWidth = nil
+                    }
+            )
     }
 
     private func confirmClearCurrentSpace() {
@@ -120,10 +163,17 @@ struct ContentView: View {
                                 allSpacesRow(entry)
                             }
                         }
+                        .background(
+                            GeometryReader { proxy in
+                                Color.clear.preference(key: ContentHeightKey.self, value: proxy.size.height)
+                            }
+                        )
                     }
-                    .frame(height: min(CGFloat(liveSpaceEntries.count * 34), 180))
+                    .onPreferenceChange(ContentHeightKey.self) { allSpacesContentHeight = $0 }
+                    .frame(height: min(allSpacesContentHeight > 0 ? allSpacesContentHeight : CGFloat(liveSpaceEntries.count * 34), 400))
                 }
                 .padding(.horizontal, 12)
+                .padding(.top, 8)
                 .padding(.bottom, 8)
             }
         }
@@ -147,8 +197,14 @@ struct ContentView: View {
                                 )
                             }
                         }
+                        .background(
+                            GeometryReader { proxy in
+                                Color.clear.preference(key: ContentHeightKey.self, value: proxy.size.height)
+                            }
+                        )
                     }
-                    .frame(height: min(CGFloat(unavailableSpaceEntries.count * 24), 144))
+                    .onPreferenceChange(ContentHeightKey.self) { unavailableSpacesContentHeight = $0 }
+                    .frame(height: min(unavailableSpacesContentHeight > 0 ? unavailableSpacesContentHeight : CGFloat(unavailableSpaceEntries.count * 24), 144))
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
@@ -296,10 +352,6 @@ struct ContentView: View {
                     Divider()
                     Button("Save All Spaces…", action: saveAllSpaces)
                     Divider()
-                    SettingsLink {
-                        Text("Settings…")
-                    }
-                    Divider()
                     Button("Quit") {
                         NSApplication.shared.terminate(nil)
                     }
@@ -438,5 +490,17 @@ private struct UnavailableSpaceRow: View {
         .padding(.vertical, 2)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+    }
+}
+
+/// Reports a view's measured height up to an ancestor, so a `ScrollView`
+/// can be sized to its content's actual height (rows vary in height, e.g.
+/// when a description wraps) instead of an estimated row-height guess,
+/// which otherwise leaves a sliver of visible scrollbar even when
+/// everything fits.
+private struct ContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
