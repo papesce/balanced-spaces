@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-08-10
+
+### Added
+
+- Popover width can be dragged to resize; the width is remembered across launches.
+
+### Fixed
+
+- The popover now shrinks back down after exiting edit mode.
+- Space list heights are measured reliably so wrapped descriptions no longer leave a scrollbar sliver.
+- Aligned paddings across the popover (current Space row, Space list, footer) and cleared the resize handle from the footer's menu.
+
 ## [0.1.2] - 2026-08-10
 
 ### Added
