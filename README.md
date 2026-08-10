@@ -24,3 +24,13 @@ A lightweight macOS menu bar app that helps you keep track of what each Space (v
 4. Switch desktops (Ctrl+←/→) and the menu updates to reflect the new Space.
 
 **Stack:** Swift, SwiftUI, and AppKit, built as a native macOS menu bar app.
+
+## Releases
+
+Add new changes under the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md), then cut a release with:
+
+```
+./scripts/release.sh 0.1.2
+```
+
+This dates and moves the `[Unreleased]` section to `0.1.2`, bumps the version and build number in `Info.plist`, commits, and tags `v0.1.2`.
