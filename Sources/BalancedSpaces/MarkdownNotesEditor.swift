@@ -94,5 +94,11 @@ private struct HighlightingTextView: NSViewRepresentable {
             parent.text = textView.string
             parent.applyHighlighting(to: textView)
         }
+
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            guard let url = link as? URL, let path = TerminalLink.path(from: url) else { return false }
+            TerminalLink.open(at: path)
+            return true
+        }
     }
 }

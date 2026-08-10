@@ -9,6 +9,8 @@ A lightweight macOS menu bar app that helps you keep track of what each Space (v
 - **Notes per Space** — jot down quick notes for each desktop.
 - **Text highlighting** — mark up notes with a highlight style to make key parts stand out.
 - **Clickable links** — URLs typed into your notes are automatically detected and become clickable.
+- **Terminal shortcuts** — a backticked folder path (e.g. `` `~/dev/project` ``) in your notes opens Terminal.app in that folder when clicked.
+- **Labeled links** — `[label](url-or-folder)` renders as a clickable `label`, where the target is a URL (opens in your browser) or a folder path like `~/dev/project` (opens Terminal.app in that folder).
 - **Backup & restore** — export your Spaces (names, icons, notes) to a file and import them again, making it easy to back up or move your setup to another Mac.
 - **Runs quietly in the background** — no dock icon, no clutter, just a menu bar item.
 
