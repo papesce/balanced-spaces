@@ -47,7 +47,7 @@ final class SpaceFileManager {
     private let fileManager = FileManager.default
     private var snapshotWorkItem: DispatchWorkItem?
 
-    func save(entry: SpaceConfig.SpaceEntry, to url: URL) throws {
+    private func saveSnapshotEntry(_ entry: SpaceConfig.SpaceEntry, to url: URL) throws {
         let file = SpaceFile(
             formatVersion: SpaceFile.currentVersion,
             savedAt: Date(),
@@ -60,7 +60,7 @@ final class SpaceFileManager {
         try data.write(to: url, options: .atomic)
     }
 
-    func saveAll(entries: [SpaceConfig.SpaceEntry], to folder: URL) throws {
+    private func saveSnapshot(entries: [SpaceConfig.SpaceEntry], to folder: URL) throws {
         try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
         var usedNames: Set<String> = []
         for entry in entries {
@@ -74,26 +74,8 @@ final class SpaceFileManager {
             }
             usedNames.insert(candidate)
             let url = folder.appendingPathComponent(candidate).appendingPathExtension("balancedspace")
-            try save(entry: entry, to: url)
+            try saveSnapshotEntry(entry, to: url)
         }
-    }
-
-    func load(from url: URL) throws -> SpaceFile {
-        let data = try Data(contentsOf: url)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let file = try decoder.decode(SpaceFile.self, from: data)
-        guard file.formatVersion == SpaceFile.currentVersion else {
-            throw SpaceFileError.unsupportedVersion(file.formatVersion)
-        }
-        return file
-    }
-
-    func apply(_ file: SpaceFile, toSpaceID id: UInt64, config: SpaceConfig) {
-        config.updateName(file.name, for: id)
-        config.updateDescription(file.description, for: id)
-        config.updateNotes(file.notes, for: id)
-        config.updateSymbol(file.symbolName, for: id)
     }
 
     func scheduleSnapshot(entries: [SpaceConfig.SpaceEntry]) {
@@ -112,7 +94,7 @@ final class SpaceFileManager {
             let folder = try backupFolder()
             let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
             let snapshotFolder = folder.appendingPathComponent(stamp, isDirectory: true)
-            try saveAll(entries: entries, to: snapshotFolder)
+            try saveSnapshot(entries: entries, to: snapshotFolder)
             let snapshots = try fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.creationDateKey])
                 .filter { $0.hasDirectoryPath }
                 .sorted { $0.lastPathComponent > $1.lastPathComponent }

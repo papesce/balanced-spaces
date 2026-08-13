@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Bindable var store: SpaceStore
-    private let fileManager = SpaceFileManager()
+    @AppStorage("libraryExpanded") private var libraryExpanded = true
     @State private var saveLoadError: String?
     @State private var showSavedIndicator = false
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "didShowOnboarding")
@@ -28,6 +28,7 @@ struct ContentView: View {
             spacesSection
             allSpacesSection
             unavailableSpacesSection
+            librarySection
             Divider()
             footer
         }
@@ -85,26 +86,16 @@ struct ContentView: View {
             )
     }
 
-    private func confirmClearCurrentSpace() {
-        guard store.currentEntry != nil else { return }
+    private func confirmDeleteCurrentEntry(_ entry: SpaceConfig.SpaceEntry) {
         let alert = NSAlert()
-        alert.messageText = "Clear this Space?"
-        alert.informativeText = "This removes the name, description, notes, and icon for the current Space. This can't be undone."
+        alert.messageText = "Delete this entry?"
+        alert.informativeText = "This removes the name, description, notes, and icon. This can't be undone."
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Clear")
+        alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
         if alert.runModal() == .alertFirstButtonReturn {
-            clearCurrentSpace()
+            store.config.delete(id: entry.id)
         }
-    }
-
-    private func clearCurrentSpace() {
-        guard let id = store.currentSpaceID else { return }
-        store.config.updateName("", for: id)
-        store.config.updateDescription("", for: id)
-        store.config.updateNotes("", for: id)
-        store.config.updateSymbol(nil, for: id)
-        scheduleSavedIndicator()
     }
 
     /// Debounced: waits for edits to settle before showing "Saved", since the
@@ -126,6 +117,9 @@ struct ContentView: View {
             if let entry = store.currentEntry {
                 spaceRow(entry)
                     .padding(12)
+            } else if store.currentSpaceID != nil, store.currentSpaceID != 0 {
+                unassignedSpaceBanner
+                    .padding(12)
             } else {
                 Text("No Space detected")
                     .font(.callout)
@@ -135,19 +129,37 @@ struct ContentView: View {
         }
     }
 
+    private var unassignedSpaceBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("No entry for this Space")
+                .font(.title3)
+            Text("Create a new entry, or assign one from your Library below.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Button("Create New") { createAndEdit() }
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var liveSpaceEntries: [SpaceConfig.SpaceEntry] {
         if let liveSpaceIDs = store.liveSpaceIDs {
-            return store.config.sortedEntries.filter { liveSpaceIDs.contains($0.id) }
+            return store.config.sortedEntries.filter { entry in
+                guard let assigned = entry.assignedSpaceID else { return false }
+                return liveSpaceIDs.contains(assigned)
+            }
         }
         guard let currentSpaceID = store.currentSpaceID else { return [] }
-        return store.config.sortedEntries.filter { $0.id == currentSpaceID }
+        return store.config.sortedEntries.filter { $0.assignedSpaceID == currentSpaceID }
     }
 
     private var unavailableSpaceEntries: [SpaceConfig.SpaceEntry] {
         guard store.liveSpaceIDs != nil else { return [] }
-        return store.config.sortedEntries.filter {
-            !$0.name.isEmpty || !$0.description.isEmpty || !$0.notes.isEmpty || $0.symbolName != nil
-        }.filter { store.isStale($0) }
+        return store.config.sortedEntries.filter { store.isStale($0) }
+    }
+
+    private var unassignedEntries: [SpaceConfig.SpaceEntry] {
+        store.config.unassignedEntries
     }
 
     private var allSpacesSection: some View {
@@ -169,7 +181,7 @@ struct ContentView: View {
                             allSpacesContentHeight = newHeight
                         }
                     }
-                    .frame(height: min(allSpacesContentHeight > 0 ? ceil(allSpacesContentHeight) : CGFloat(liveSpaceEntries.count * 34), 400))
+                    .frame(height: min(allSpacesContentHeight > 0 ? ceil(allSpacesContentHeight) : CGFloat(liveSpaceEntries.count * 34), 240))
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
@@ -188,11 +200,10 @@ struct ContentView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 4) {
                             ForEach(unavailableSpaceEntries) { entry in
-                                UnavailableSpaceRow(
+                                LibraryEntryRow(
                                     entry: entry,
-                                    canAssign: store.currentEntry != nil,
-                                    onSaveAndClear: { saveAndClear(entry) },
-                                    onCopyToCurrent: { reassign(entry) }
+                                    onUnassign: { store.config.unassign(entry.id) },
+                                    onDelete: { store.config.delete(id: entry.id) }
                                 )
                             }
                         }
@@ -210,8 +221,55 @@ struct ContentView: View {
         }
     }
 
+    private var librarySection: some View {
+        Group {
+            if !unassignedEntries.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { libraryExpanded.toggle() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .rotationEffect(.degrees(libraryExpanded ? 90 : 0))
+                            Text("Library (\(unassignedEntries.count))")
+                                .font(.callout)
+                        }
+                        .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if libraryExpanded {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(unassignedEntries) { entry in
+                                    LibraryEntryRow(
+                                        entry: entry,
+                                        onAssignToCurrent: store.currentSpaceID != nil && store.currentSpaceID != 0
+                                            ? { store.config.assign(entry.id, toSpaceID: store.currentSpaceID!) }
+                                            : nil,
+                                        onDelete: { store.config.delete(id: entry.id) }
+                                    )
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 120)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+        }
+    }
+
+    private func createAndEdit() {
+        guard let id = store.currentSpaceID, id != 0 else { return }
+        let entry = store.config.createEntry(boundTo: id)
+        beginEditing(with: entry)
+    }
+
     private func allSpacesRow(_ entry: SpaceConfig.SpaceEntry) -> some View {
-        let isCurrent = entry.id == store.currentSpaceID
+        let isCurrent = entry.assignedSpaceID != nil && entry.assignedSpaceID == store.currentSpaceID
         return HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: entry.symbolName ?? "circle")
                 .font(.system(size: 12))
@@ -278,9 +336,9 @@ struct ContentView: View {
                     } else {
                         Menu {
                             Button("Edit…", action: { beginEditing(with: entry) })
-                            Button("Save…", action: { _ = backup(entry) })
-                            Button("Load…", action: loadSpace)
-                            Button("Save and Clear…", action: saveAndClearCurrentSpace)
+                            Button("Unassign") { store.config.unassign(entry.id) }
+                            Divider()
+                            Button("Delete…", role: .destructive) { confirmDeleteCurrentEntry(entry) }
                         } label: {
                             Image(systemName: "ellipsis.circle")
                                 .font(.system(size: 14))
@@ -347,7 +405,8 @@ struct ContentView: View {
                         store.refreshSpaceStatus()
                     }
                     Divider()
-                    Button("Save All Spaces…", action: saveAllSpaces)
+                    Button("Back Up to File…", action: exportEntries)
+                    Button("Restore from File…", action: importEntries)
                     Divider()
                     Button("Quit") {
                         NSApplication.shared.terminate(nil)
@@ -365,97 +424,55 @@ struct ContentView: View {
         .padding(.vertical, 8)
     }
 
-    private func saveAndClearCurrentSpace() {
-        guard let entry = store.currentEntry else { return }
-        if backup(entry) {
-            confirmClearCurrentSpace()
-        }
-    }
-
-    private func backup(_ entry: SpaceConfig.SpaceEntry) -> Bool {
+    private func exportEntries() {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.balancedSpace]
-        let baseName = (entry.name.isEmpty ? "Untitled Space" : entry.name)
-            .replacingOccurrences(of: " ", with: "-")
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
-        let stamp = formatter.string(from: Date())
-        panel.nameFieldStringValue = "\(baseName) \(stamp).balancedspace"
-        guard panel.runModal() == .OK, let url = panel.url else { return false }
-        do {
-            try fileManager.save(entry: entry, to: url)
-            saveLoadError = nil
-            return true
-        } catch {
-            saveLoadError = "Save failed: \(error.localizedDescription)"
-            return false
-        }
-    }
-
-    private func saveAndClear(_ entry: SpaceConfig.SpaceEntry) {
-        if backup(entry) {
-            store.config.delete(id: entry.id)
-        }
-    }
-
-    private func saveAllSpaces() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.prompt = "Choose"
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "Balanced Spaces.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try fileManager.saveAll(entries: store.config.allEntries(), to: url)
-            saveLoadError = nil
-        } catch {
-            saveLoadError = "Save failed: \(error.localizedDescription)"
-        }
+        do { try store.config.exportData().write(to: url, options: .atomic) }
+        catch { saveLoadError = "Export failed: \(error.localizedDescription)" }
     }
 
-    private func loadSpace() {
-        guard let spaceID = store.currentSpaceID, store.currentEntry != nil else { return }
+    private func importEntries() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.balancedSpace]
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            let file = try fileManager.load(from: url)
-            fileManager.apply(file, toSpaceID: spaceID, config: store.config)
-            saveLoadError = nil
-        } catch {
-            saveLoadError = "Load failed: \(error.localizedDescription)"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) else { return }
+        let alert = NSAlert()
+        alert.messageText = "Import Entries"
+        alert.informativeText = "Add imported entries to your library, or replace everything?"
+        alert.addButton(withTitle: "Add to Library")
+        alert.addButton(withTitle: "Replace All")
+        alert.addButton(withTitle: "Cancel")
+        let result = alert.runModal()
+        guard result != .alertThirdButtonReturn else { return }
+        if result == .alertSecondButtonReturn {
+            let confirm = NSAlert()
+            confirm.messageText = "Replace All Entries?"
+            confirm.informativeText = "This overwrites every entry, including current Space assignments."
+            confirm.addButton(withTitle: "Replace All")
+            confirm.addButton(withTitle: "Cancel")
+            guard confirm.runModal() == .alertFirstButtonReturn else { return }
         }
+        do { try store.config.importData(data, replace: result == .alertSecondButtonReturn) }
+        catch { saveLoadError = "Import failed: \(error.localizedDescription)" }
     }
-
-    private func reassign(_ source: SpaceConfig.SpaceEntry) {
-        guard let currentID = store.currentSpaceID,
-              let current = store.currentEntry else { return }
-
-        if !current.name.isEmpty || !current.description.isEmpty || !current.notes.isEmpty || current.symbolName != nil {
-            let alert = NSAlert()
-            alert.messageText = "Replace Current Space?"
-            alert.informativeText = "This will replace the current Space’s name, description, notes, and icon with the saved settings from “\(source.name.isEmpty ? "Untitled Space" : source.name)”."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Replace")
-            alert.addButton(withTitle: "Cancel")
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
-        }
-
-        store.config.copy(source, to: currentID)
-        scheduleSavedIndicator()
-    }
-
 }
 
-private struct UnavailableSpaceRow: View {
+/// A compact row for an entry not shown in the primary editor: either bound to
+/// an offline Space (Unavailable) or unbound (Library).
+private struct LibraryEntryRow: View {
     let entry: SpaceConfig.SpaceEntry
-    let canAssign: Bool
-    let onSaveAndClear: () -> Void
-    let onCopyToCurrent: () -> Void
+    var onAssignToCurrent: (() -> Void)?
+    var onUnassign: (() -> Void)?
+    let onDelete: () -> Void
     @State private var isHovered = false
+
+    init(entry: SpaceConfig.SpaceEntry, onAssignToCurrent: (() -> Void)? = nil, onUnassign: (() -> Void)? = nil, onDelete: @escaping () -> Void) {
+        self.entry = entry
+        self.onAssignToCurrent = onAssignToCurrent
+        self.onUnassign = onUnassign
+        self.onDelete = onDelete
+    }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -467,13 +484,12 @@ private struct UnavailableSpaceRow: View {
                 .font(.callout)
                 .foregroundStyle(entry.name.isEmpty ? .tertiary : .primary)
             Spacer()
-            // Keep the control in the layout even when it is hidden. This
-            // prevents the row's hover area from moving when the control appears,
-            // so it can be reached from the label without losing the hover state.
+            // Keep the control in the layout even when it is hidden so the row's
+            // hover area doesn't shift when the control appears.
             Menu {
-                Button("Save and Clear…", action: onSaveAndClear)
-                Button("Copy to Current", action: onCopyToCurrent)
-                    .disabled(!canAssign)
+                if let onAssignToCurrent { Button("Assign to Current Space", action: onAssignToCurrent) }
+                if let onUnassign { Button("Unassign", action: onUnassign) }
+                Button("Delete", role: .destructive, action: onDelete)
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .font(.system(size: 14))

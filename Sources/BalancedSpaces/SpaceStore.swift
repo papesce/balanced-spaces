@@ -20,33 +20,29 @@ final class SpaceStore {
     }
 
     var currentSpaceName: String {
-        guard let id = currentSpaceID, id != 0 else { return "?" }
-        guard let entry = config.entry(for: id) else { return "?" }
+        guard let entry = currentEntry else { return "?" }
         return entry.name.isEmpty ? "?" : entry.name
     }
 
+    /// The entry bound to the current macOS Space, if any. nil means the Space
+    /// has no entry assigned yet.
     var currentEntry: SpaceConfig.SpaceEntry? {
         guard let id = currentSpaceID, id != 0 else { return nil }
-        return config.entry(for: id)
+        return config.entry(forSpaceID: id)
     }
 
     func spaceDidChange() {
-        let id = SpaceWatcher.currentSpaceID()
-        currentSpaceID = id
+        currentSpaceID = SpaceWatcher.currentSpaceID()
         refreshSpaceStatus()
-        guard id != 0 else { return }
-        config.ensureEntry(for: id)
     }
 
     func refreshSpaceStatus() {
         liveSpaceIDs = SpaceWatcher.currentSpaceIDs()
-        for id in liveSpaceIDs ?? [] {
-            config.ensureEntry(for: id)
-        }
     }
 
+    /// True when the entry is bound to a Space that isn't currently live.
     func isStale(_ entry: SpaceConfig.SpaceEntry) -> Bool {
-        guard let liveSpaceIDs else { return false }
-        return !liveSpaceIDs.contains(entry.id)
+        guard let assigned = entry.assignedSpaceID, let liveSpaceIDs else { return false }
+        return !liveSpaceIDs.contains(assigned)
     }
 }
