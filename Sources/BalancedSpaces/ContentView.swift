@@ -22,6 +22,7 @@ struct ContentView: View {
     private let popoverWidthRange: ClosedRange<Double> = 340...600
     @State private var allSpacesContentHeight: CGFloat = 0
     @State private var unavailableSpacesContentHeight: CGFloat = 0
+    @State private var libraryContentHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -84,18 +85,6 @@ struct ContentView: View {
                         dragStartWidth = nil
                     }
             )
-    }
-
-    private func confirmDeleteCurrentEntry(_ entry: SpaceConfig.SpaceEntry) {
-        let alert = NSAlert()
-        alert.messageText = "Delete this entry?"
-        alert.informativeText = "This removes the name, description, notes, and icon. This can't be undone."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        if alert.runModal() == .alertFirstButtonReturn {
-            store.config.delete(id: entry.id)
-        }
     }
 
     /// Debounced: waits for edits to settle before showing "Saved", since the
@@ -202,8 +191,7 @@ struct ContentView: View {
                             ForEach(unavailableSpaceEntries) { entry in
                                 LibraryEntryRow(
                                     entry: entry,
-                                    onUnassign: { store.config.unassign(entry.id) },
-                                    onDelete: { store.config.delete(id: entry.id) }
+                                    onUnassign: { store.config.unassign(entry.id) }
                                 )
                             }
                         }
@@ -252,8 +240,13 @@ struct ContentView: View {
                                     )
                                 }
                             }
+                            .onGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.size.height
+                            } action: { newHeight in
+                                libraryContentHeight = newHeight
+                            }
                         }
-                        .frame(maxHeight: 120)
+                        .frame(height: min(libraryContentHeight > 0 ? ceil(libraryContentHeight) : CGFloat(unassignedEntries.count * 24), 120))
                     }
                 }
                 .padding(.horizontal, 12)
@@ -337,8 +330,6 @@ struct ContentView: View {
                         Menu {
                             Button("Edit…", action: { beginEditing(with: entry) })
                             Button("Unassign") { store.config.unassign(entry.id) }
-                            Divider()
-                            Button("Delete…", role: .destructive) { confirmDeleteCurrentEntry(entry) }
                         } label: {
                             Image(systemName: "ellipsis.circle")
                                 .font(.system(size: 14))
@@ -464,10 +455,10 @@ private struct LibraryEntryRow: View {
     let entry: SpaceConfig.SpaceEntry
     var onAssignToCurrent: (() -> Void)?
     var onUnassign: (() -> Void)?
-    let onDelete: () -> Void
+    var onDelete: (() -> Void)?
     @State private var isHovered = false
 
-    init(entry: SpaceConfig.SpaceEntry, onAssignToCurrent: (() -> Void)? = nil, onUnassign: (() -> Void)? = nil, onDelete: @escaping () -> Void) {
+    init(entry: SpaceConfig.SpaceEntry, onAssignToCurrent: (() -> Void)? = nil, onUnassign: (() -> Void)? = nil, onDelete: (() -> Void)? = nil) {
         self.entry = entry
         self.onAssignToCurrent = onAssignToCurrent
         self.onUnassign = onUnassign
@@ -489,7 +480,7 @@ private struct LibraryEntryRow: View {
             Menu {
                 if let onAssignToCurrent { Button("Assign to Current Space", action: onAssignToCurrent) }
                 if let onUnassign { Button("Unassign", action: onUnassign) }
-                Button("Delete", role: .destructive, action: onDelete)
+                if let onDelete { Button("Delete", role: .destructive, action: onDelete) }
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .font(.system(size: 14))
