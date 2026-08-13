@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-08-13
+
+### Changed
+
+- Profiles and Spaces are now a single list of entries. Each entry can be assigned to a macOS Space or kept unassigned in a collapsible Library; editing an entry saves automatically, with no separate "save profile" step.
+- A Space with no entry shows a "Create New" prompt; assign an existing entry from its Library row instead.
+- Footer backup actions renamed to "Back Up to File…" and "Restore from File…", and now cover every entry.
+
+### Fixed
+
+- Expanding the Library now grows the popover so its entries are visible.
+- Trimmed section heights so the footer (version, menu, Quit) stays on screen.
+
+### Removed
+
+- Delete is now offered only on unassigned Library entries; unassign an assigned Space first to delete it.
+
 ## [0.1.3] - 2026-08-10
 
 ### Added
