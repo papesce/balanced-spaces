@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-08-20
+
+### Changed
+
+- Remove menu bar style picker; app now runs in window mode only.
+- Launch at Login toggle is disabled when the app is not signed.
+- Default backup filename now includes the current date (e.g. `balanced-spaces-2026-08-20.json`).
+
+### Fixed
+
+- Settings window now opens correctly via the gear menu.
+
 ## [0.1.4] - 2026-08-13
 
 ### Changed
