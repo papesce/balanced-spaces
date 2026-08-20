@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Bindable var store: SpaceStore
+    @Environment(\.openSettings) private var openSettings
     @AppStorage("libraryExpanded") private var libraryExpanded = true
     @State private var saveLoadError: String?
     @State private var showSavedIndicator = false
@@ -399,6 +400,12 @@ struct ContentView: View {
                     Button("Back Up to File…", action: exportEntries)
                     Button("Restore from File…", action: importEntries)
                     Divider()
+                    Button("Settings…") {
+                        openSettings()
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                    .keyboardShortcut(",", modifiers: .command)
+                    Divider()
                     Button("Quit") {
                         NSApplication.shared.terminate(nil)
                     }
@@ -418,7 +425,8 @@ struct ContentView: View {
     private func exportEntries() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "Balanced Spaces.json"
+        let dateStr = ISO8601DateFormatter().string(from: .now).prefix(10)
+        panel.nameFieldStringValue = "balanced-spaces-\(dateStr).json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try store.config.exportData().write(to: url, options: .atomic) }
         catch { saveLoadError = "Export failed: \(error.localizedDescription)" }

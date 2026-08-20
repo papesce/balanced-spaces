@@ -1,36 +1,43 @@
 # Balanced Spaces
 
-A lightweight macOS menu bar app that helps you keep track of what each Space (virtual desktop) is for. It lives quietly in your menu bar, detects which Space you're on, and lets you attach a name, icon, and notes to it — so switching desktops with Ctrl+←/→ always tells you what you're looking at.
+<img src="sample.png" width="466" alt="Balanced Spaces">
+
+Give each macOS Space a name, icon, and notes. Switch desktops and always know where you are.
+
+## Requirements
+
+macOS 14+
+
+## Install
+
+Download the latest `.app` from [Releases](../../releases) and drag it to your Applications folder.
+
+Or build from source — see [Development](#development).
+
+## How it works
+
+macOS Spaces have no labels. Balanced Spaces lives in your menu bar, detects which Space you've switched to, and shows the name, icon, and notes you've assigned to it. Switch with Ctrl+← / Ctrl+→ and the menu updates instantly.
 
 ## Features
 
-- **Per-Space identity** — give each Space a name and a custom icon so you can tell them apart at a glance.
-- **Read-only by default, edit on demand** — the menu shows a clean, plain-text view of the current Space; hover to reveal a pencil, make your changes, then Done to save or Cancel to discard.
-- **Notes per Space** — jot down quick notes for each desktop.
-- **Text highlighting** — mark up notes with a highlight style to make key parts stand out.
-- **Clickable links** — URLs typed into your notes are automatically detected and become clickable.
-- **Labeled links** — `[label](url-or-folder)` renders as a clickable `label`, where the target is a URL (opens in your browser) or a folder path like `~/dev/project` (opens Terminal.app in that folder). Hovering shows a pointing-hand cursor and a tooltip with the target. Links only become clickable in the read-only view — while editing they're plain text.
-- **Backup & restore** — export your Spaces (names, icons, notes) to a file and import them again, making it easy to back up or move your setup to another Mac.
-- **Runs quietly in the background** — no dock icon, no clutter, just a menu bar item.
+- **Per-Space identity** — name and custom icon so you can tell Spaces apart at a glance.
+- **Notes** — write anything: context, links, reminders. Supports text highlighting.
+- **Clickable links** — URLs are auto-detected. Use `[label](url-or-~/path)` for labeled links; folder paths open in Terminal.
+- **Read-only by default** — hover a row to reveal the edit pencil; press Done to save or Cancel to discard.
+- **Backup & restore** — export your setup to a file and restore it on any Mac.
+- **Menu bar only** — no Dock icon, no clutter.
 
-## Getting Started
+## Development
 
-1. Build and launch the app:
-   ```
-   ./scripts/package.sh
-   ```
-2. Look for the Balanced Spaces icon in your menu bar.
-3. Click it to see the current Space, give it a name/icon, and add notes.
-4. Switch desktops (Ctrl+←/→) and the menu updates to reflect the new Space.
-
-**Stack:** Swift, SwiftUI, and AppKit, built as a native macOS menu bar app.
-
-## Releases
-
-Add new changes under the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md), then cut a release with:
-
+**Build and run:**
 ```
-./scripts/release.sh 0.1.2
+./scripts/package.sh
 ```
 
-This dates and moves the `[Unreleased]` section to `0.1.2`, bumps the version and build number in `Info.plist`, commits, and tags `v0.1.2`.
+**Cut a release:**
+```
+./scripts/release.sh 0.1.5
+```
+This dates the `[Unreleased]` section in `CHANGELOG.md`, bumps the version in `Info.plist`, commits, and tags `v0.1.5`.
+
+Built with Swift, SwiftUI, and AppKit.

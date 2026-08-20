@@ -9,24 +9,13 @@ struct BalancedSpacesApp: App {
         NSApplication.shared.setActivationPolicy(.accessory)
     }
 
-    private var isMenuStyle: Bool {
-        MenuBarStyle(rawValue: UserDefaults.standard.string(forKey: "menuBarStyle") ?? "") == .menu
-    }
-
     var body: some Scene {
-        MenuBarExtra(isInserted: .constant(!isMenuStyle)) {
+        MenuBarExtra {
             ContentView(store: store)
         } label: {
             menuBarLabel
         }
         .menuBarExtraStyle(.window)
-
-        MenuBarExtra(isInserted: .constant(isMenuStyle)) {
-            ContentView(store: store)
-        } label: {
-            menuBarLabel
-        }
-        .menuBarExtraStyle(.menu)
 
         Settings {
             SettingsView()
